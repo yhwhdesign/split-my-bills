@@ -28,6 +28,9 @@ would ease cashflow strain.
 - **Distribution: PWA, not native app stores.** No Apple/Google developer account, no store
   fees, no App Store/Play Store review process. "Mobile app" = installable web app.
 - **Monorepo** — one repo, shared logic between web and the PWA (same Next.js app).
+- **Branch workflow**: `main` only receives merges from `dev` after work is tested and
+  confirmed. All day-to-day work happens on `dev` (or feature branches off `dev`, once
+  real feature work starts). Never commit directly to `main`.
 
 ---
 
@@ -95,8 +98,8 @@ The LLM only explains/prioritizes those numbers in plain English — it does not
 
 ## 7. Current Status
 
-**Phase:** Phase 0 (architecture fully decided — scaffolding starts next session)
-**Last updated:** 2026-07-16
+**Phase:** Phase 0 (scaffold complete and verified — dev server confirmed on local machine + mobile)
+**Last updated:** 2026-07-17
 
 Nothing scaffolded yet. Stack, AI provider strategy, PWA distribution, and the Usage Governor
 concept are all agreed. Next concrete step: choose monorepo tool (Turborepo vs. Nx) and
@@ -131,8 +134,23 @@ scaffold the repo skeleton.
   solo/small JS-TS projects our size; Nx's extra power targets large multi-language orgs we're
   not). Still no code written yet — architecture is fully decided, next session starts scaffolding.
 - **2026-07-17**: Renamed project from "Bill Splitter" to "Split My Bills" before creating the
-  GitHub repo. Repo name decided: `split-my-bills`. No code written yet — about to start
-  terminal-based scaffolding (gh CLI → clone → Turborepo setup).
+  GitHub repo. Repo name decided: `split-my-bills`. Repo created via `gh` CLI, cloned locally,
+  opened in VS Code. `PROJECT_STATE.md` committed and pushed as the first commit on `main`.
+  Created `dev` branch off `main` and set it as the working branch going forward — `main` will
+  only receive tested/confirmed merges from `dev`. Scaffolded the monorepo on `dev`: root
+  `package.json` with npm workspaces, Turborepo installed + `turbo.json` configured, Next.js
+  (TypeScript, Tailwind, App Router, `src/` dir) scaffolded into `apps/web`, root `.gitignore`
+  and `.env.example` created. Hit and fixed a Turborepo error (missing `packageManager` field
+  in root `package.json` — added `"packageManager": "npm@<version>"`). First code commit pushed
+  to `dev` (30 files). **Verified end-to-end: `npm run dev` from root runs via Turborepo →
+  Next.js serves on `localhost:3000`, and is also reachable from a real phone over local WiFi
+  via the machine's local IP.** Foundation confirmed working before any app logic is written.
+
+**Next session starts here:** decide what to scaffold next — options are (a) `packages/shared`
+package + wire it into `apps/web` as a real workspace dependency (proves cross-package imports
+work before we rely on them for real logic), or (b) start on the Prisma schema + Neon DB
+connection, or (c) start the PWA manifest/service worker. Recommend (a) first since later
+phases depend on the shared package existing and working.
 
 ---
 
