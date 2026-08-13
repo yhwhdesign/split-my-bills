@@ -28,6 +28,9 @@ would ease cashflow strain.
 - **Distribution: PWA, not native app stores.** No Apple/Google developer account, no store
   fees, no App Store/Play Store review process. "Mobile app" = installable web app.
 - **Monorepo** — one repo, shared logic between web and the PWA (same Next.js app).
+- **Branch workflow**: `main` only receives merges from `dev` after work is tested and
+  confirmed. All day-to-day work happens on `dev` (or feature branches off `dev`, once
+  real feature work starts). Never commit directly to `main`.
 
 ---
 
@@ -131,8 +134,10 @@ scaffold the repo skeleton.
   solo/small JS-TS projects our size; Nx's extra power targets large multi-language orgs we're
   not). Still no code written yet — architecture is fully decided, next session starts scaffolding.
 - **2026-07-17**: Renamed project from "Bill Splitter" to "Split My Bills" before creating the
-  GitHub repo. Repo name decided: `split-my-bills`. No code written yet — about to start
-  terminal-based scaffolding (gh CLI → clone → Turborepo setup).
+  GitHub repo. Repo name decided: `split-my-bills`. Repo created via `gh` CLI, cloned locally,
+  opened in VS Code. `PROJECT_STATE.md` committed and pushed as the first commit on `main`.
+  Created `dev` branch off `main` and set it as the working branch going forward — `main` will
+  only receive tested/confirmed merges from `dev`. Next: Turborepo scaffold, done on `dev`.
 
 ---
 
