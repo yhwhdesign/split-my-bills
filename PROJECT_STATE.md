@@ -92,7 +92,7 @@ The LLM only explains/prioritizes those numbers in plain English — it does not
 - [ ] **Phase 3 — AI Coaching Layer**: `AIProvider` interface (Ollama default, Gemini fallback), plain-English suggestions endpoint
 - [ ] **Phase 3.5 — Usage Governor**: `AIUsageLog` table, daily ceiling check before every AI call, response caching keyed on bill/income snapshot, graceful fallback to rules-engine-only output, admin usage-visibility endpoint
 - [ ] **Phase 4 — Plaid Integration**: bank sync, auto-categorization, reconciliation
-- [ ] **Phase 5 — PWA Polish**: manifest.json, service worker, installability, offline fallback, mobile-responsive UI pass, "update available" refresh prompt flow
+- [ ] **Phase 5 — PWA Polish**: manifest.json, service worker, installability, offline fallback, mobile-responsive UI pass, "update available" refresh prompt flow, iOS install-guidance screen (see backlog note below)
 
 ---
 
@@ -104,6 +104,14 @@ The LLM only explains/prioritizes those numbers in plain English — it does not
 - **Push notifications**: Web Push API (free, standard). Note: iOS Safari requires the PWA
   be "Added to Home Screen" before push works — plan an install prompt/nudge if we want
   reliable iPhone delivery. Android/Chrome has no such restriction.
+- **iOS browser behavior (researched 2026-07-17)**: all iOS browsers (Safari, Chrome, Firefox,
+  Edge) use Apple's WebKit engine under the hood — no browser-specific crash/render risk on
+  iOS. The app always works as a normal website regardless of browser. What's conditional:
+  (1) home-screen install works from Safari, Chrome, Edge, Firefox, Orion on iOS 16.4+, but
+  NOT reliably from in-app browsers (Mail, Instagram, etc. — user must open in a real browser
+  first); (2) push notifications only work for a PWA actually installed to the home screen,
+  on any iOS browser. Plan: build a lightweight "install this app" guidance screen for iOS
+  users as part of Phase 5, since iOS has no automatic install banner like Android/desktop do.
 - **Multi-user readiness confirmed**: architecture already supports sharing the app with
   real users once Auth (Phase 1) is built — `User` table scoping, PWA URL-based distribution
   (no app store needed), and the Usage Governor were all designed with multi-user sharing
