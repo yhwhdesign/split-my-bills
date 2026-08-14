@@ -1,8 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -10,4 +5,95 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+enum PaySchedule {
+  WEEKLY
+  BIWEEKLY
+  SEMIMONTHLY
+  MONTHLY
+}
+
+enum PaymentStatus {
+  SCHEDULED
+  PAID
+  MISSED
+}
+
+model User {
+  id            String         @id @default(cuid())
+  name          String
+  email         String         @unique
+  passwordHash  String
+  paySchedule   PaySchedule
+  paydayAnchor  DateTime
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  incomeSources IncomeSource[]
+  bills         Bill[]
+  suggestions   SplitSuggestion[]
+}
+
+model IncomeSource {
+  id           String      @id @default(cuid())
+  userId       String
+  name         String
+  amount       Decimal
+  frequency    PaySchedule
+  nextPayDate  DateTime
+
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}
+
+model Bill {
+  id              String            @id @default(cuid())
+  userId          String
+  name            String
+  amount          Decimal
+  dueDate         Int               // day of month, 1-31
+  category        String?
+  isRecurring     Boolean           @default(true)
+  splittable      Boolean           @default(false)
+  minSplitAmount  Decimal?
+
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payments        Payment[]
+  suggestions     SplitSuggestion[]
+
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  billId          String
+  amount          Decimal
+  paidDate        DateTime?
+  status          PaymentStatus @default(SCHEDULED)
+  isSplitPayment  Boolean       @default(false)
+  splitGroupId    String?
+
+  bill            Bill          @relation(fields: [billId], references: [id], onDelete: Cascade)
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model SplitSuggestion {
+  id              String    @id @default(cuid())
+  userId          String
+  billId          String
+  suggestedSplit  Boolean
+  reasoning       String
+  suggestedDates  DateTime[]
+  confidence      Float
+
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bill            Bill      @relation(fields: [billId], references: [id], onDelete: Cascade)
+
+  createdAt       DateTime  @default(now())
 }

@@ -104,6 +104,19 @@ The LLM only explains/prioritizes those numbers in plain English — it does not
 - **Push notifications**: Web Push API (free, standard). Note: iOS Safari requires the PWA
   be "Added to Home Screen" before push works — plan an install prompt/nudge if we want
   reliable iPhone delivery. Android/Chrome has no such restriction.
+
+**Design Direction** (added 2026-07-17): References are BillOut (calm, organized, card-based
+layout, sparing color-as-accent) + 1Bill (bolder, more saturated color confidence, friendlier
+bigger type) + EveryDollar (overall clarity/simplicity benchmark). Direction: BillOut's
+organized bones (cards not tables, clear info hierarchy, generous whitespace, rounded corners)
+combined with 1Bill's bolder color confidence — a strong primary color used deliberately on
+key surfaces (hero elements, primary actions, the AI split-suggestion callout) rather than the
+muted default finance-app blue/green everywhere. Practical implications already decided: cards
+not dense tables for bills/income; clear color-coded status language (paid/upcoming/at-risk)
+tying directly into the cashflow-risk feature; Tailwind (installed) + shadcn/ui (free,
+copy-paste, no lock-in) for standard components, fully custom styling for the dashboard and
+split-suggestion cards. Not yet decided: exact hex palette, font pairing, dark mode — to be
+finalized when Phase 1 UI work begins.
 - **iOS browser behavior (researched 2026-07-17)**: all iOS browsers (Safari, Chrome, Firefox,
   Edge) use Apple's WebKit engine under the hood — no browser-specific crash/render risk on
   iOS. The app always works as a normal website regardless of browser. What's conditional:
@@ -123,8 +136,9 @@ The LLM only explains/prioritizes those numbers in plain English — it does not
 
 ## 7. Current Status
 
-**Phase:** Phase 0 (scaffold complete and verified — dev server confirmed on local machine + mobile)
-**Last updated:** 2026-07-17
+**Phase:** Phase 0 complete → entering Phase 1 (Core MVP). Database is live and connected;
+schema deployed to Neon; Prisma Client verified working end-to-end with a real query.
+**Last updated:** 2026-07-17 (evening)
 
 Nothing scaffolded yet. Stack, AI provider strategy, PWA distribution, and the Usage Governor
 concept are all agreed. Next concrete step: choose monorepo tool (Turborepo vs. Nx) and
@@ -190,13 +204,32 @@ phases depend on the shared package existing and working.
   cleaned up `apps/web/AGENTS.md` and `apps/web/CLAUDE.md` (AI-tool boilerplate from
   `create-next-app`, redundant with `PROJECT_STATE.md`). Committed and pushed to `dev`.
 
-**Foundation is now fully proven**: monorepo workspaces, Turborepo orchestration, Next.js
-serving, cross-package imports (`apps/web` ← `packages/shared`), local network reachability
-(desktop + phone), and git branch workflow (`dev` → `main`) are all working end to end.
-**Next session options:** (a) Prisma schema + Neon DB connection, (b) PWA manifest/service
-worker for installability, (c) start building out the real `isCashflowRisk` logic into the
-full split-suggestion algorithm. No strong dependency order between these three now that
-`packages/shared` exists — pick based on what's most motivating to see working next.
+- **2026-07-17 (cont'd, evening)**: Wrote the real Prisma schema (`User`, `IncomeSource`, `Bill`,
+  `Payment`, `SplitSuggestion`, plus `PaySchedule`/`PaymentStatus` enums) matching our original
+  data model design, using `Decimal` for money fields (avoids float rounding errors) and
+  `onDelete: Cascade` for referential integrity. Hit a real Prisma 7 breaking change: the
+  `datasource.url` field is no longer allowed directly in `schema.prisma` — connection URLs
+  now live only in `prisma.config.ts` for the CLI, and the runtime `PrismaClient` requires an
+  explicit driver adapter package (`@prisma/adapter-pg` + `pg`). Fixed by removing `url` from
+  the schema, installing the adapter, and building `src/lib/prisma.ts` as a single shared
+  client instance (with a dev-mode global-reuse pattern to avoid connection-pool exhaustion on
+  hot reload). First migration (`init`) ran successfully — live tables now exist in Neon.
+
+  Hit a second real bug: the Prisma Client wasn't actually generated at the path our schema's
+  `output` pointed to, even though `migrate dev` is supposed to run `generate` automatically —
+  it silently didn't. Diagnosed via `find`/`ls` (confirmed no `generated/` folder existed
+  anywhere), fixed by running `npx prisma generate` explicitly, which succeeded and created
+  the client at the expected path. **Lesson learned, now a standing habit: always run
+  `npx prisma generate` explicitly after any schema change, don't rely on `migrate dev` to
+  do it silently.**
+
+  Verified end-to-end with a real query: `page.tsx` now calls `prisma.user.count()` and
+  correctly renders "Users in database: 0" — confirmed live round-trip from Next.js through
+  the driver adapter to the real Neon Postgres database.
+
+**Next session starts here:** database is live and connected. Next real feature work is
+Phase 1 (auth) or starting to build real forms/API routes for creating income sources and
+bills (currently only reading a count, nothing can be created yet through the UI).
 
 ---
 
