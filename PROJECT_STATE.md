@@ -154,9 +154,9 @@ finalized when Phase 1 UI work begins.
 
 ## 7. Current Status
 
-**Phase:** Phase 0 complete → entering Phase 1 (Core MVP). Database is live and connected;
-schema deployed to Neon; Prisma Client verified working end-to-end with a real query.
-**Last updated:** 2026-07-17 (evening)
+**Phase:** Phase 1 in progress — auth backend complete and pushed to `dev` (hashing, sessions,
+API routes, route protection middleware, correctly pathed and verified). UI pages not yet built.
+**Last updated:** 2026-07-17 (evening, session paused)
 
 Nothing scaffolded yet. Stack, AI provider strategy, PWA distribution, and the Usage Governor
 concept are all agreed. Next concrete step: choose monorepo tool (Turborepo vs. Nx) and
@@ -245,9 +245,38 @@ phases depend on the shared package existing and working.
   correctly renders "Users in database: 0" — confirmed live round-trip from Next.js through
   the driver adapter to the real Neon Postgres database.
 
-**Next session starts here:** database is live and connected. Next real feature work is
-Phase 1 (auth) or starting to build real forms/API routes for creating income sources and
-bills (currently only reading a count, nothing can be created yet through the UI).
+- **2026-07-17 (cont'd)**: Built the full auth backend for Phase 1: `src/lib/auth.ts`
+  (bcrypt password hashing, JWT session tokens via `jose`, 7-day expiry), signup/login/logout
+  API routes (`/api/auth/signup`, `/login`, `/logout`) using httpOnly secure cookies, and
+  `middleware.ts` enforcing route protection (`/dashboard` requires a session; `/login` and
+  `/signup` redirect away if already logged in). Generic "Invalid credentials" message used
+  for both wrong-email and wrong-password cases (deliberate security practice — doesn't leak
+  which emails are registered). Verified: dev server starts with no errors, all imports/syntax
+  clean. **Not yet built: the actual signup/login UI pages** — backend is ready, no forms exist
+  yet to call these routes from.
+
+**Next session starts here:** build the signup/login page UI (depends on design direction
+notes above — first real chance to apply the BillOut/1Bill-inspired look), wire them to the
+auth API routes we just built, then test full signup → login → protected dashboard redirect
+flow end to end.
+
+- **2026-07-17 (cont'd, session end)**: Hit a real bug before committing: `middleware.ts`
+  landed at `apps/middleware.ts` instead of `apps/web/middleware.ts` (a `cd` level mix-up,
+  same category as the earlier `src/index.ts` misplacement). This one was sneaky — wrong
+  location means Next.js silently does NOT run the middleware at all, no error, no crash —
+  route protection would have quietly not worked. Caught it via `git status` showing the file
+  without the expected `web/` path prefix, before committing. Fixed by moving it into place
+  and re-verifying `git status` showed correct paths. Auth backend commit pushed clean to
+  `dev` (6 files: middleware, 3 API routes, auth lib, package.json). Session paused here.
+
+- **2026-07-17 (cont'd)**: Discussed automated bank-account data pulling (bills, deposits,
+  auto-notifications, projections). Researched Plaid pricing — confirmed it has no lasting
+  free production tier (real recurring costs, ~$9K/year median), conflicting with the
+  net-zero hardline. Decided against Plaid in the free core app; replaced Phase 4 with
+  user-initiated CSV/PDF statement upload, parsed by our AI layer into structured data, with
+  trend detection and cashflow projections built from real history. Plaid logged in backlog
+  as a possible future paid-tier decision only. Also discussed and logged app design direction
+  (BillOut + 1Bill + EveryDollar references) as backlog notes for when Phase 1 UI work begins.
 
 ---
 
