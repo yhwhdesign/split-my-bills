@@ -152,6 +152,27 @@ work before we rely on them for real logic), or (b) start on the Prisma schema +
 connection, or (c) start the PWA manifest/service worker. Recommend (a) first since later
 phases depend on the shared package existing and working.
 
+- **2026-07-17 (cont'd)**: Built `packages/shared` — its own `package.json`
+  (`@split-my-bills/shared`) and a first real (small) piece of domain logic in `src/index.ts`
+  (`PaySchedule` type, `Bill` interface, `isCashflowRisk()` function). Wired it into `apps/web`
+  as a workspace dependency and updated `page.tsx` to actually import and render its output as
+  a live end-to-end test. Hit a real bug: `src/index.ts` was created at the repo root instead
+  of inside `packages/shared/` (a `cd` mix-up), causing a "Module not found" error even though
+  the workspace symlink and both `package.json` files were correct. Diagnosed it by checking
+  each link in the chain (symlink → package.json → actual file), found the misplaced file via
+  `find . -name index.ts`, moved it to the correct path, and confirmed the fix — the shared
+  package's logic now renders correctly in the browser, both locally and on mobile. Also
+  cleaned up `apps/web/AGENTS.md` and `apps/web/CLAUDE.md` (AI-tool boilerplate from
+  `create-next-app`, redundant with `PROJECT_STATE.md`). Committed and pushed to `dev`.
+
+**Foundation is now fully proven**: monorepo workspaces, Turborepo orchestration, Next.js
+serving, cross-package imports (`apps/web` ← `packages/shared`), local network reachability
+(desktop + phone), and git branch workflow (`dev` → `main`) are all working end to end.
+**Next session options:** (a) Prisma schema + Neon DB connection, (b) PWA manifest/service
+worker for installability, (c) start building out the real `isCashflowRisk` logic into the
+full split-suggestion algorithm. No strong dependency order between these three now that
+`packages/shared` exists — pick based on what's most motivating to see working next.
+
 ---
 
 ## 10. Next Step (pick up here next session)
