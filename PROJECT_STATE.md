@@ -31,6 +31,13 @@ would ease cashflow strain.
 - **Branch workflow**: `main` only receives merges from `dev` after work is tested and
   confirmed. All day-to-day work happens on `dev` (or feature branches off `dev`, once
   real feature work starts). Never commit directly to `main`.
+- **How users get bill data in: manual entry + user-initiated statement upload only.**
+  No live bank-account connection (Plaid or similar) in the free/core product — researched
+  2026-07-17 and confirmed Plaid has no lasting free tier for production use (real costs,
+  ~$9K/year median per Vendr data, once past a short trial), which breaks the no-billing-
+  surprises rule. Real bank-sync is a possible *future paid tier* decision, not part of the
+  net-zero core app. See Phase 4 and Future/Backlog for the chosen alternative (AI-parsed
+  statement import).
 
 ---
 
@@ -91,7 +98,11 @@ The LLM only explains/prioritizes those numbers in plain English — it does not
 - [ ] **Phase 2 — Split Engine**: pay-schedule-aware cashflow calculator, split suggestion logic
 - [ ] **Phase 3 — AI Coaching Layer**: `AIProvider` interface (Ollama default, Gemini fallback), plain-English suggestions endpoint
 - [ ] **Phase 3.5 — Usage Governor**: `AIUsageLog` table, daily ceiling check before every AI call, response caching keyed on bill/income snapshot, graceful fallback to rules-engine-only output, admin usage-visibility endpoint
-- [ ] **Phase 4 — Plaid Integration**: bank sync, auto-categorization, reconciliation
+- [ ] **Phase 4 — Statement Import & Trend Analysis**: user-initiated CSV/PDF bank statement
+  upload (their choice, nothing auto-pulled), AI-parsed into structured bills/transactions
+  (reuses the same AI layer as Phase 3), trend detection (recurring bills, average amounts,
+  spending patterns) and cashflow projections built from real historical data. Zero new
+  vendor cost — no bank API, just file parsing.
 - [ ] **Phase 5 — PWA Polish**: manifest.json, service worker, installability, offline fallback, mobile-responsive UI pass, "update available" refresh prompt flow, iOS install-guidance screen (see backlog note below)
 
 ---
@@ -125,6 +136,13 @@ finalized when Phase 1 UI work begins.
   first); (2) push notifications only work for a PWA actually installed to the home screen,
   on any iOS browser. Plan: build a lightweight "install this app" guidance screen for iOS
   users as part of Phase 5, since iOS has no automatic install banner like Android/desktop do.
+- **Bank sync (Plaid) — deliberately NOT in the free core app**: researched 2026-07-17, real
+  ongoing cost (subscription/per-call fees, no lasting free production tier) conflicts with
+  the net-zero hardline. If ever pursued, it would be a clearly separate future paid tier that
+  funds its own Plaid costs, not something bundled into the free app. Chosen free alternative:
+  user-initiated statement upload (CSV/PDF), parsed by our AI layer into structured bills/
+  transactions, with trend detection and cashflow projections built from that real historical
+  data. User stays in control of what's shared — nothing pulled automatically.
 - **Multi-user readiness confirmed**: architecture already supports sharing the app with
   real users once Auth (Phase 1) is built — `User` table scoping, PWA URL-based distribution
   (no app store needed), and the Usage Governor were all designed with multi-user sharing
