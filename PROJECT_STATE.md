@@ -154,11 +154,11 @@ finalized when Phase 1 UI work begins.
 
 ## 7. Current Status
 
-**Phase:** Phase 1 auth is COMPLETE and fully verified — signup, login, logout, route
-protection all tested end to end, all passing. shadcn/ui installed and styled (Maia preset,
-indigo accent). **Next real work: data-entry forms** — nothing exists yet to actually create
-income sources or bills; the dashboard is still a placeholder beyond the logout button.
-**Last updated:** 2026-07-18 (evening, cont'd)
+**Phase:** Phase 1 auth COMPLETE and verified. **Full CRUD for Income Sources and Bills
+also COMPLETE and verified** — create, read, delete all tested working end to end via a real
+dashboard UI, fully scoped per-user. Backend edit (PATCH) routes exist and work; inline-edit
+UI not yet built (delete-and-re-add is the current workaround for fixing mistakes).
+**Last updated:** 2026-07-18 (late evening)
 
 Nothing scaffolded yet. Stack, AI provider strategy, PWA distribution, and the Usage Governor
 concept are all agreed. Next concrete step: choose monorepo tool (Turborepo vs. Nx) and
@@ -308,6 +308,37 @@ signup → login → protected `/dashboard` redirect flow end to end.
   `/login` via `proxy.ts`, (3) logging back in with real credentials correctly lands on
   `/dashboard`. **Phase 1 auth is fully complete and verified**: signup, login, logout, and
   route protection all confirmed working end to end in both directions.
+
+- **2026-07-18 (cont'd, late)**: Built full CRUD for income sources and bills. API routes:
+  `GET`/`POST /api/income` and `/api/bills`, plus `PATCH`/`DELETE /api/income/[id]` and
+  `/api/bills/[id]` — every route scoped to the logged-in user (via a new shared
+  `getCurrentUserId()` helper in `src/lib/session.ts`) and every PATCH/DELETE double-checks
+  `existing.userId !== userId` before touching data, so no user can edit/delete another
+  user's records even by guessing an ID. Rebuilt the dashboard page to actually show real
+  data: three summary cards (Income / Bills / Remaining, remaining turns red via
+  `--destructive` when negative — first real use of the color-coded status language from our
+  design direction), plus add-forms for both income and bills.
+
+  Hit two bugs: (1) a form-reset `TypeError` from calling `.reset()` on `e.currentTarget`
+  after an `await` — React can clear that reference by then; fixed by capturing
+  `const form = e.currentTarget` before the `await` and using `form` throughout. (2) The
+  bracket-named dynamic route folders (`[id]`) — zsh interprets `[id]` as a glob pattern, so
+  the `mkdir`/`touch` commands need quotes around the path. Separately, a stray `cd` left the
+  terminal inside `apps/web` when creating the income `[id]` route, causing it to nest at
+  `apps/web/apps/web/src/app/api/income/[id]/route.ts` — diagnosed via `find` from the repo
+  root (showed the duplicate path clearly), fixed by moving the file into place and deleting
+  the stray `apps/web/apps` folder. Bills route was created correctly the second time by
+  confirming `pwd` before running the command. Added delete buttons to both income and bill
+  list items, wired to the new DELETE routes — tested and confirmed working.
+
+  **Full CRUD now verified working end to end for both Income Sources and Bills**, fully
+  scoped per-user. Backend PATCH/edit routes exist and work; **UI for editing amounts inline
+  is not yet built** — currently the only way to fix a mistake is delete-and-re-add.
+
+**Next session starts here:** either (a) build a proper inline-edit UI for income/bills
+(small addition, same pattern as delete), or (b) move on to Phase 2 — the actual pay-schedule-
+aware split-suggestion logic, which is the app's core differentiator and hasn't been started
+yet beyond the placeholder `isCashflowRisk()` function in `packages/shared`.
 
 - **2026-07-17 (cont'd, session end)**: Hit a real bug before committing: `middleware.ts`
   landed at `apps/middleware.ts` instead of `apps/web/middleware.ts` (a `cd` level mix-up,
