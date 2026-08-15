@@ -154,9 +154,9 @@ finalized when Phase 1 UI work begins.
 
 ## 7. Current Status
 
-**Phase:** Phase 1 in progress — auth backend complete and pushed to `dev` (hashing, sessions,
-API routes, route protection middleware, correctly pathed and verified). UI pages not yet built.
-**Last updated:** 2026-07-17 (evening, session paused)
+**Phase:** Phase 1 in progress — auth backend complete and pushed. shadcn/ui installed
+(Radix + Maia preset), accent color set, base components added. UI pages still not built.
+**Last updated:** 2026-07-18
 
 Nothing scaffolded yet. Stack, AI provider strategy, PWA distribution, and the Usage Governor
 concept are all agreed. Next concrete step: choose monorepo tool (Turborepo vs. Nx) and
@@ -255,10 +255,25 @@ phases depend on the shared package existing and working.
   clean. **Not yet built: the actual signup/login UI pages** — backend is ready, no forms exist
   yet to call these routes from.
 
-**Next session starts here:** build the signup/login page UI (depends on design direction
-notes above — first real chance to apply the BillOut/1Bill-inspired look), wire them to the
-auth API routes we just built, then test full signup → login → protected dashboard redirect
-flow end to end.
+- **2026-07-18**: Set up shadcn/ui — chose Radix UI as the component library (most mature/
+  battle-tested, best accessibility defaults) and the **Maia** preset (soft, rounded, generous
+  spacing — matches our BillOut-inspired calm/consumer-facing design direction, versus Nova/
+  Mira which are dashboard-dense or Lyra which is sharp/technical). Added `button`, `input`,
+  `label`, `card` components. Set the accent color to an indigo/violet (`oklch(0.585 0.233
+  277.117)` light / `oklch(0.673 0.182 276.935)` dark) in `globals.css` — deliberately not the
+  generic finance-app green/blue, calmer than red/orange given the app deals with bill-stress,
+  applied to `--primary`, `--ring`, `--sidebar-primary`. Hit a confusing bug: `src/lib/utils.ts`
+  (shadcn's `cn()` helper) appeared correctly in place with correct content and dependencies
+  installed, yet Next.js kept reporting "Module not found." Root cause was **stale Turbopack
+  cache** from an earlier moment when the file genuinely was missing — not a real file/path
+  problem this time. Fixed by deleting `apps/web/.next` and hard-refreshing the browser.
+  **Lesson: if a file/path checks out completely correct but the error persists, clear
+  `.next` before assuming the file itself is broken.**
+
+**Next session starts here:** build the actual signup and login page UI using shadcn
+components (`card`, `input`, `label`, `button`) styled with our indigo accent, wired to the
+`/api/auth/signup` and `/api/auth/login` routes built last session. Then test the full
+signup → login → protected `/dashboard` redirect flow end to end.
 
 - **2026-07-17 (cont'd, session end)**: Hit a real bug before committing: `middleware.ts`
   landed at `apps/middleware.ts` instead of `apps/web/middleware.ts` (a `cd` level mix-up,
