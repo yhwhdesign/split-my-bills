@@ -45,17 +45,19 @@ would ease cashflow strain.
 
 | Layer | Choice | Notes |
 |---|---|---|
-| Monorepo tool | Turborepo (or Nx — TBD when we scaffold) | |
-| Backend | Node + TypeScript + Express/Fastify | |
-| Web + Mobile frontend | **Next.js, built as a PWA** | One codebase. Installable on phones via manifest + service worker. No app store, no store fees, no RN/Expo needed. |
-| Database | Postgres via Neon | Free tier |
-| ORM | Prisma | |
-| Validation | Zod | |
-| Auth | Self-rolled (Lucia or similar) | Avoid paid auth providers |
-| AI Provider (dev) | **Ollama** (local, self-hosted, unlimited, zero cost) | Primary for local development |
-| AI Provider (production) | **Gemini Flash-Lite free tier** | Capped (~1,500 req/day, 15 RPM). Ollama isn't viable in prod (self-hosting an LLM server costs money) |
-| Usage Governor | Custom — tracks calls in our DB, enforces a ceiling below Google's real cap, caches AI responses, falls back to rules-engine-only output when near/at the limit | See Phase 3.5 |
-| CI | GitHub Actions | Free minutes |
+| Monorepo tool | **Turborepo** (confirmed over Nx — industry-standard default at our scale) | |
+| Backend | Next.js API routes (Node + TypeScript) | No separate Express/Fastify server — Next.js's own API routes handle this |
+| Web + Mobile frontend | **Next.js, built as a PWA** | One codebase. Installable on phones via manifest + service worker (Phase 5, not yet built). No app store, no store fees, no RN/Expo needed. |
+| UI components | **shadcn/ui** (Radix UI + Maia preset) | Free, copy-paste, no lock-in. Indigo/violet accent color, not generic finance green/blue |
+| Database | Postgres via Neon | Free tier, scales to zero when idle. **Live and connected.** |
+| ORM | **Prisma 7** | Uses driver adapters (`@prisma/adapter-pg`) — a Prisma 7 breaking change from older versions. Schema deployed, migrations working |
+| Validation | Zod | Not yet wired into API routes — planned, not yet done |
+| Auth | **Self-rolled**: bcrypt password hashing + `jose` JWT sessions, httpOnly cookies | **Built and fully verified working** |
+| Route protection | **`proxy.ts`** (Next.js 16's replacement for `middleware.ts`) | Must live in `src/proxy.ts` given our `--src-dir` setup |
+| AI Provider (dev) | **Ollama** (local, self-hosted, unlimited, zero cost) | Not yet integrated — Phase 3 |
+| AI Provider (production) | **Gemini Flash-Lite free tier** | Capped (~1,500 req/day, 15 RPM). Not yet integrated — Phase 3 |
+| Usage Governor | Custom — tracks calls in our DB, enforces a ceiling below Google's real cap, caches AI responses, falls back to rules-engine-only output when near/at the limit | Designed, not yet built — Phase 3.5 |
+| CI | GitHub Actions | Free minutes. Not yet set up |
 
 **Decided:** Ollama for dev, Gemini Flash-Lite (governed) for production. React Native/Expo dropped in favor of PWA — simpler, still net-zero, no store accounts needed.
 
@@ -93,9 +95,12 @@ The LLM only explains/prioritizes those numbers in plain English — it does not
 
 ## 6. Build Phases
 
-- [ ] **Phase 0 — Setup**: GitHub repo, monorepo scaffold, VS Code config, `.env.example`
-- [ ] **Phase 1 — Core MVP**: auth, manual income/bill entry, dashboard (income vs. bills vs. remaining)
+- [x] **Phase 0 — Setup**: GitHub repo, monorepo scaffold, VS Code config, `.env.example` — **complete**
+- [ ] **Phase 1 — Core MVP**: auth (✅ complete, verified), manual income/bill CRUD (✅ create/read/delete
+  complete and verified; inline-edit UI still missing), dashboard showing income vs. bills vs.
+  remaining (✅ complete)
 - [ ] **Phase 2 — Split Engine**: pay-schedule-aware cashflow calculator, split suggestion logic
+  (not started — only a placeholder `isCashflowRisk()` exists in `packages/shared`)
 - [ ] **Phase 3 — AI Coaching Layer**: `AIProvider` interface (Ollama default, Gemini fallback), plain-English suggestions endpoint
 - [ ] **Phase 3.5 — Usage Governor**: `AIUsageLog` table, daily ceiling check before every AI call, response caching keyed on bill/income snapshot, graceful fallback to rules-engine-only output, admin usage-visibility endpoint
 - [ ] **Phase 4 — Statement Import & Trend Analysis**: user-initiated CSV/PDF bank statement
@@ -160,10 +165,6 @@ dashboard UI, fully scoped per-user. Backend edit (PATCH) routes exist and work;
 UI not yet built (delete-and-re-add is the current workaround for fixing mistakes).
 **Last updated:** 2026-07-18 (late evening)
 
-Nothing scaffolded yet. Stack, AI provider strategy, PWA distribution, and the Usage Governor
-concept are all agreed. Next concrete step: choose monorepo tool (Turborepo vs. Nx) and
-scaffold the repo skeleton.
-
 ---
 
 ## 8. Decision Log
@@ -205,11 +206,7 @@ scaffold the repo skeleton.
   Next.js serves on `localhost:3000`, and is also reachable from a real phone over local WiFi
   via the machine's local IP.** Foundation confirmed working before any app logic is written.
 
-**Next session starts here:** decide what to scaffold next — options are (a) `packages/shared`
-package + wire it into `apps/web` as a real workspace dependency (proves cross-package imports
-work before we rely on them for real logic), or (b) start on the Prisma schema + Neon DB
-connection, or (c) start the PWA manifest/service worker. Recommend (a) first since later
-phases depend on the shared package existing and working.
+*(at this point, next step chosen was: `packages/shared` — see below)*
 
 - **2026-07-17 (cont'd)**: Built `packages/shared` — its own `package.json`
   (`@split-my-bills/shared`) and a first real (small) piece of domain logic in `src/index.ts`
@@ -272,10 +269,7 @@ phases depend on the shared package existing and working.
   **Lesson: if a file/path checks out completely correct but the error persists, clear
   `.next` before assuming the file itself is broken.**
 
-**Next session starts here:** build the actual signup and login page UI using shadcn
-components (`card`, `input`, `label`, `button`) styled with our indigo accent, wired to the
-`/api/auth/signup` and `/api/auth/login` routes built last session. Then test the full
-signup → login → protected `/dashboard` redirect flow end to end.
+*(at this point, next step chosen was: build signup/login UI — see below)*
 
 - **2026-07-18 (cont'd)**: Built signup, login, and a minimal dashboard page using shadcn
   components. Signup worked and redirected correctly, but visiting `/login` while already
@@ -309,6 +303,21 @@ signup → login → protected `/dashboard` redirect flow end to end.
   `/dashboard`. **Phase 1 auth is fully complete and verified**: signup, login, logout, and
   route protection all confirmed working end to end in both directions.
 
+  Also hit a real bug before committing this batch: `middleware.ts` (before the rename above)
+  had landed at `apps/middleware.ts` instead of the correct location — same category of `cd`
+  level mix-up as other bugs this project. Caught via `git status` showing the file without
+  the expected `web/` path prefix, before committing. Fixed by moving it into place and
+  re-verifying `git status` showed correct paths.
+
+- **2026-07-18 (cont'd, late)**: Discussed automated bank-account data pulling (bills,
+  deposits, auto-notifications, projections). Researched Plaid pricing — confirmed it has no
+  lasting free production tier (real recurring costs, ~$9K/year median), conflicting with the
+  net-zero hardline. Decided against Plaid in the free core app; replaced Phase 4 with
+  user-initiated CSV/PDF statement upload, parsed by our AI layer into structured data, with
+  trend detection and cashflow projections built from real history. Plaid logged in backlog
+  as a possible future paid-tier decision only. Also discussed and logged app design direction
+  (BillOut + 1Bill + EveryDollar references) as backlog notes for Phase 1 UI work.
+
 - **2026-07-18 (cont'd, late)**: Built full CRUD for income sources and bills. API routes:
   `GET`/`POST /api/income` and `/api/bills`, plus `PATCH`/`DELETE /api/income/[id]` and
   `/api/bills/[id]` — every route scoped to the logged-in user (via a new shared
@@ -335,37 +344,32 @@ signup → login → protected `/dashboard` redirect flow end to end.
   scoped per-user. Backend PATCH/edit routes exist and work; **UI for editing amounts inline
   is not yet built** — currently the only way to fix a mistake is delete-and-re-add.
 
-**Next session starts here:** either (a) build a proper inline-edit UI for income/bills
-(small addition, same pattern as delete), or (b) move on to Phase 2 — the actual pay-schedule-
-aware split-suggestion logic, which is the app's core differentiator and hasn't been started
-yet beyond the placeholder `isCashflowRisk()` function in `packages/shared`.
-
-- **2026-07-17 (cont'd, session end)**: Hit a real bug before committing: `middleware.ts`
-  landed at `apps/middleware.ts` instead of `apps/web/middleware.ts` (a `cd` level mix-up,
-  same category as the earlier `src/index.ts` misplacement). This one was sneaky — wrong
-  location means Next.js silently does NOT run the middleware at all, no error, no crash —
-  route protection would have quietly not worked. Caught it via `git status` showing the file
-  without the expected `web/` path prefix, before committing. Fixed by moving it into place
-  and re-verifying `git status` showed correct paths. Auth backend commit pushed clean to
-  `dev` (6 files: middleware, 3 API routes, auth lib, package.json). Session paused here.
-
-- **2026-07-17 (cont'd)**: Discussed automated bank-account data pulling (bills, deposits,
-  auto-notifications, projections). Researched Plaid pricing — confirmed it has no lasting
-  free production tier (real recurring costs, ~$9K/year median), conflicting with the
-  net-zero hardline. Decided against Plaid in the free core app; replaced Phase 4 with
-  user-initiated CSV/PDF statement upload, parsed by our AI layer into structured data, with
-  trend detection and cashflow projections built from real history. Plaid logged in backlog
-  as a possible future paid-tier decision only. Also discussed and logged app design direction
-  (BillOut + 1Bill + EveryDollar references) as backlog notes for when Phase 1 UI work begins.
-
 ---
 
 ## 10. Next Step (pick up here next session)
 
-**Pick up here tomorrow:**
+**Where things stand:** Phase 0 (setup) and Phase 1 (auth + core CRUD) are both complete and
+verified. The app has real signup/login/logout, protected routes, and a working dashboard
+where a logged-in user can add, view, and delete their own income sources and bills, with
+live totals (Income / Bills / Remaining). Everything is committed and pushed to `dev`.
 
-1. Confirm you have an empty GitHub repo created (repo name: `split-my-bills`).
-2. Clone it locally, open in VS Code.
-3. Scaffold with Turborepo: folder structure (`apps/web`, `packages/shared`), `turbo.json`,
-   `.gitignore`, `.env.example`, base Next.js app with a PWA manifest stub.
-4. First commit + push to `main`, then start Phase 1 work on a feature branch.
+**Pick up here — two good options, pick based on preference:**
+
+1. **Inline-edit UI** (small, fast): add an edit button/form next to each income/bill list
+   item so amounts can be corrected without delete-and-re-add. The backend (`PATCH` routes)
+   already exists and works — this is UI-only work, same pattern as the delete buttons.
+2. **Phase 2 — Split Engine** (bigger, core differentiator): build the real pay-schedule-aware
+   cashflow calculator and split-suggestion logic, replacing the placeholder
+   `isCashflowRisk()` function in `packages/shared`. This is the heart of the product.
+
+**Standing lessons/habits to keep in mind going forward** (learned the hard way this project):
+- With `--src-dir` enabled, config files like `proxy.ts` belong inside `src/`, at the same
+  level as `app/` — not at the `apps/web/` root.
+- Always run `npx prisma generate` explicitly after any schema change — don't rely on
+  `migrate dev` to do it silently.
+- If a file/path checks out completely correct but an error persists, clear `apps/web/.next`
+  before assuming the file itself is broken.
+- Bracket-named folders (like Next.js's `[id]` dynamic routes) need quotes in shell commands,
+  or zsh will try to glob-expand them.
+- Before running `mkdir`/`touch`/similar path-sensitive commands, confirm `pwd` first —
+  several bugs this project came from running a command one folder level off from expected.
