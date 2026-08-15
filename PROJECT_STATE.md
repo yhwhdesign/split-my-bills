@@ -154,9 +154,11 @@ finalized when Phase 1 UI work begins.
 
 ## 7. Current Status
 
-**Phase:** Phase 1 in progress — auth backend complete and pushed. shadcn/ui installed
-(Radix + Maia preset), accent color set, base components added. UI pages still not built.
-**Last updated:** 2026-07-18
+**Phase:** Phase 1 auth complete and verified end to end — signup, login, logout, route
+protection (via `proxy.ts`) all working. shadcn/ui installed and styled (Maia preset, indigo
+accent). Next: real data-entry forms for income/bills (Phase 1 continues), or Phase 2 split
+logic — nothing can be created through the UI yet besides a user account.
+**Last updated:** 2026-07-18 (evening)
 
 Nothing scaffolded yet. Stack, AI provider strategy, PWA distribution, and the Usage Governor
 concept are all agreed. Next concrete step: choose monorepo tool (Turborepo vs. Nx) and
@@ -274,6 +276,30 @@ phases depend on the shared package existing and working.
 components (`card`, `input`, `label`, `button`) styled with our indigo accent, wired to the
 `/api/auth/signup` and `/api/auth/login` routes built last session. Then test the full
 signup → login → protected `/dashboard` redirect flow end to end.
+
+- **2026-07-18 (cont'd)**: Built signup, login, and a minimal dashboard page using shadcn
+  components. Signup worked and redirected correctly, but visiting `/login` while already
+  logged in kept showing the login form instead of redirecting to `/dashboard` — meaning
+  route protection wasn't working. Debugged via `curl` first (confirmed the signup route
+  correctly sets a real, valid session cookie — ruled out the backend), then via debug
+  `console.log` statements in the routing file (confirmed the browser dev-server terminal,
+  not browser DevTools, is where server-side logs print — new concept, noted for future
+  reference). Zero debug output appeared even after correct code — meaning the file wasn't
+  executing at all. Researched and found the real cause: **Next.js 16 deprecated
+  `middleware.ts` in favor of `proxy.ts`** (renamed export too: `proxy` not `middleware`).
+  Renamed the file and export, but still got zero execution — hit a **second** issue: since
+  this project uses `--src-dir`, `proxy.ts` must live at `apps/web/src/proxy.ts` (same level
+  as `app/`), not `apps/web/proxy.ts` — the exact same "wrong folder level relative to `src/`"
+  bug pattern as three earlier bugs tonight (`index.ts`, `utils.ts`, and the original
+  `middleware.ts` placement). Fixed by moving it into `src/`. **Confirmed working live** —
+  the dev server's file watcher picked up the corrected location instantly, debug logs
+  appeared, and the browser correctly redirected an already-logged-in user away from `/login`
+  to `/dashboard`. **Full auth flow now verified end to end: signup → session cookie set →
+  dashboard access → route protection correctly redirects both directions.**
+
+  **Standing lesson, now a checklist item for any new top-level config file** (proxy.ts,
+  middleware.ts, or similar future files): with `--src-dir` enabled, these files belong
+  inside `src/`, at the same level as `app/` — not at the `apps/web/` root.
 
 - **2026-07-17 (cont'd, session end)**: Hit a real bug before committing: `middleware.ts`
   landed at `apps/middleware.ts` instead of `apps/web/middleware.ts` (a `cd` level mix-up,
