@@ -154,11 +154,11 @@ finalized when Phase 1 UI work begins.
 
 ## 7. Current Status
 
-**Phase:** Phase 1 auth complete and verified end to end — signup, login, logout, route
-protection (via `proxy.ts`) all working. shadcn/ui installed and styled (Maia preset, indigo
-accent). Next: real data-entry forms for income/bills (Phase 1 continues), or Phase 2 split
-logic — nothing can be created through the UI yet besides a user account.
-**Last updated:** 2026-07-18 (evening)
+**Phase:** Phase 1 auth is COMPLETE and fully verified — signup, login, logout, route
+protection all tested end to end, all passing. shadcn/ui installed and styled (Maia preset,
+indigo accent). **Next real work: data-entry forms** — nothing exists yet to actually create
+income sources or bills; the dashboard is still a placeholder beyond the logout button.
+**Last updated:** 2026-07-18 (evening, cont'd)
 
 Nothing scaffolded yet. Stack, AI provider strategy, PWA distribution, and the Usage Governor
 concept are all agreed. Next concrete step: choose monorepo tool (Turborepo vs. Nx) and
@@ -300,6 +300,14 @@ signup → login → protected `/dashboard` redirect flow end to end.
   **Standing lesson, now a checklist item for any new top-level config file** (proxy.ts,
   middleware.ts, or similar future files): with `--src-dir` enabled, these files belong
   inside `src/`, at the same level as `app/` — not at the `apps/web/` root.
+
+  Added a logout button to the dashboard (the API route already existed from the earlier auth
+  backend build, just needed UI wiring). Converted dashboard to a client component for the
+  click handler. **Ran a full 4-step manual test, all passed**: (1) logout correctly redirects
+  to `/login`, (2) attempting to visit `/dashboard` while logged out correctly bounces back to
+  `/login` via `proxy.ts`, (3) logging back in with real credentials correctly lands on
+  `/dashboard`. **Phase 1 auth is fully complete and verified**: signup, login, logout, and
+  route protection all confirmed working end to end in both directions.
 
 - **2026-07-17 (cont'd, session end)**: Hit a real bug before committing: `middleware.ts`
   landed at `apps/middleware.ts` instead of `apps/web/middleware.ts` (a `cd` level mix-up,
