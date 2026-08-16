@@ -1,5 +1,6 @@
 "use client";
 
+import { Pencil, Trash2, Check, X } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,8 @@ export default function DashboardPage() {
   const [income, setIncome] = useState<IncomeSource[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editingIncomeId, setEditingIncomeId] = useState<string | null>(null);
+  const [editingBillId, setEditingBillId] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -103,6 +106,26 @@ async function handleDeleteBill(id: string) {
     loadData();
   }
 
+  async function handleUpdateIncome(id: string, amount: string) {
+  await fetch(`/api/income/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ amount: Number(amount) }),
+  });
+  setEditingIncomeId(null);
+  loadData();
+}
+
+async function handleUpdateBill(id: string, amount: string) {
+  await fetch(`/api/bills/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ amount: Number(amount) }),
+  });
+  setEditingBillId(null);
+  loadData();
+}
+
   const totalIncome = income.reduce((sum, i) => sum + Number(i.amount), 0);
   const totalBills = bills.reduce((sum, b) => sum + Number(b.amount), 0);
   const remaining = totalIncome - totalBills;
@@ -153,13 +176,29 @@ async function handleDeleteBill(id: string) {
               <div key={i.id} className="flex items-center justify-between text-sm border-b pb-2">
                 <span>{i.name}</span>
                 <div className="flex items-center gap-2">
-                  <span>${Number(i.amount).toFixed(2)}</span>
-                  <button
-                    onClick={() => handleDeleteIncome(i.id)}
-                    className="text-destructive text-xs hover:underline"
-                  >
-                    Delete
-                  </button>
+                  {editingIncomeId === i.id ? (
+                    <EditAmountForm
+                      initialValue={i.amount}
+                      onSave={(val) => handleUpdateIncome(i.id, val)}
+                      onCancel={() => setEditingIncomeId(null)}
+                    />
+                  ) : (
+                    <>
+                      <span>${Number(i.amount).toFixed(2)}</span>
+                      <button
+                        onClick={() => setEditingIncomeId(i.id)}
+                        className="text-muted-foreground/50 hover:text-primary transition-colors"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteIncome(i.id)}
+                        className="text-muted-foreground/50 hover:text-destructive transition-colors"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             ))}
@@ -196,13 +235,29 @@ async function handleDeleteBill(id: string) {
               <div key={b.id} className="flex items-center justify-between text-sm border-b pb-2">
                 <span>{b.name} (due {b.dueDate})</span>
                 <div className="flex items-center gap-2">
-                  <span>${Number(b.amount).toFixed(2)}</span>
-                  <button
-                    onClick={() => handleDeleteBill(b.id)}
-                    className="text-destructive text-xs hover:underline"
-                  >
-                    Delete
-                  </button>
+                  {editingBillId === b.id ? (
+                    <EditAmountForm
+                      initialValue={b.amount}
+                      onSave={(val) => handleUpdateBill(b.id, val)}
+                      onCancel={() => setEditingBillId(null)}
+                    />
+                  ) : (
+                    <>
+                      <span>${Number(b.amount).toFixed(2)}</span>
+                      <button
+                      onClick={() => setEditingBillId(b.id)}
+                      className="text-muted-foreground/50 hover:text-primary transition-colors"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteBill(b.id)}
+                      className="text-muted-foreground/50 hover:text-destructive transition-colors"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                    </>
+                  )}
                 </div>
               </div>
             ))}
@@ -231,4 +286,37 @@ async function handleDeleteBill(id: string) {
       </div>
     </main>
   );
+
+  function EditAmountForm({
+  initialValue,
+  onSave,
+  onCancel,
+}: {
+  initialValue: string;
+  onSave: (value: string) => void;
+  onCancel: () => void;
+}) {
+  const [value, setValue] = useState(initialValue);
+
+  return (
+    <div className="flex items-center gap-1">
+      <Input
+        type="number"
+        step="0.01"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        className="h-7 w-24 text-sm"
+        autoFocus
+      />
+      <button 
+        onClick={() => onSave(value)} className="text-primary hover:opacity-80">
+          <Check size={16} />
+      </button>
+      <button
+        onClick={onCancel} className="text-muted-foreground/50 hover:text-foreground">
+          <X size={16} />
+      </button>
+    </div>
+  );
+}
 }

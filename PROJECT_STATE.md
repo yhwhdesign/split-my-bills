@@ -96,9 +96,9 @@ The LLM only explains/prioritizes those numbers in plain English — it does not
 ## 6. Build Phases
 
 - [x] **Phase 0 — Setup**: GitHub repo, monorepo scaffold, VS Code config, `.env.example` — **complete**
-- [ ] **Phase 1 — Core MVP**: auth (✅ complete, verified), manual income/bill CRUD (✅ create/read/delete
-  complete and verified; inline-edit UI still missing), dashboard showing income vs. bills vs.
-  remaining (✅ complete)
+- [x] **Phase 1 — Core MVP**: auth (✅ complete, verified), manual income/bill CRUD
+  (✅ **fully complete** — create/read/update/delete all working end to end, inline-edit UI
+  built), dashboard showing income vs. bills vs. remaining (✅ complete) — **Phase 1 complete**
 - [ ] **Phase 2 — Split Engine**: pay-schedule-aware cashflow calculator, split suggestion logic
   (not started — only a placeholder `isCashflowRisk()` exists in `packages/shared`)
 - [ ] **Phase 3 — AI Coaching Layer**: `AIProvider` interface (Ollama default, Gemini fallback), plain-English suggestions endpoint
@@ -120,6 +120,11 @@ The LLM only explains/prioritizes those numbers in plain English — it does not
 - **Push notifications**: Web Push API (free, standard). Note: iOS Safari requires the PWA
   be "Added to Home Screen" before push works — plan an install prompt/nudge if we want
   reliable iPhone delivery. Android/Chrome has no such restriction.
+- **Rocket Money-inspired ideas** (added 2026-07-19): spending trend line/bar charts over
+  time (Phase 4, once statement import gives us historical data — `recharts` available);
+  visually group "Recurring" vs "One-time" bills on the dashboard instead of one flat list
+  (`isRecurring` field already exists on `Bill`, just needs UI work); trend indicator
+  (up/down arrow vs. last period) on the "Remaining" summary card instead of a flat snapshot.
 
 **Design Direction** (added 2026-07-17): References are BillOut (calm, organized, card-based
 layout, sparing color-as-accent) + 1Bill (bolder, more saturated color confidence, friendlier
@@ -159,11 +164,10 @@ finalized when Phase 1 UI work begins.
 
 ## 7. Current Status
 
-**Phase:** Phase 1 auth COMPLETE and verified. **Full CRUD for Income Sources and Bills
-also COMPLETE and verified** — create, read, delete all tested working end to end via a real
-dashboard UI, fully scoped per-user. Backend edit (PATCH) routes exist and work; inline-edit
-UI not yet built (delete-and-re-add is the current workaround for fixing mistakes).
-**Last updated:** 2026-07-18 (late evening)
+**Phase:** **Phase 1 is fully COMPLETE** — auth, and full CRUD (create/read/update/delete)
+for Income Sources and Bills, all verified working end to end with a polished inline-edit UI.
+Next: Phase 2, the split-suggestion engine — the app's core differentiator.
+**Last updated:** 2026-07-19
 
 ---
 
@@ -353,14 +357,40 @@ verified. The app has real signup/login/logout, protected routes, and a working 
 where a logged-in user can add, view, and delete their own income sources and bills, with
 live totals (Income / Bills / Remaining). Everything is committed and pushed to `dev`.
 
-**Pick up here — two good options, pick based on preference:**
+- **2026-07-19**: Built inline-edit UI for income/bill amounts (click-to-edit pattern with a
+  reusable `EditAmountForm` component, Save/Cancel). **Phase 1 is now fully complete** —
+  full CRUD (create/read/update/delete) working end to end for both Income Sources and Bills.
+  Swapped text-label Edit/Delete/Save/Cancel buttons for faded `lucide-react` icons
+  (`Pencil`, `Trash2`, `Check`, `X`) using `text-muted-foreground/50` with color-on-hover —
+  present but not visually loud, matching the calm design direction.
 
-1. **Inline-edit UI** (small, fast): add an edit button/form next to each income/bill list
-   item so amounts can be corrected without delete-and-re-add. The backend (`PATCH` routes)
-   already exists and works — this is UI-only work, same pattern as the delete buttons.
-2. **Phase 2 — Split Engine** (bigger, core differentiator): build the real pay-schedule-aware
-   cashflow calculator and split-suggestion logic, replacing the placeholder
-   `isCashflowRisk()` function in `packages/shared`. This is the heart of the product.
+  Looked at Rocket Money for additional feature ideas. Two concrete, buildable ideas logged
+  to backlog: (1) spending trend line/bar charts over time (ties into Phase 4 once historical
+  data exists via statement import — `recharts` is available in this environment), (2)
+  visually grouping "Recurring" vs "One-time" bills on the dashboard rather than one flat list
+  (we already have `isRecurring` on the `Bill` model, just needs UI grouping). Also noted the
+  general pattern of showing a trend indicator (up/down vs. last period) on the "Remaining"
+  summary card, not just a snapshot number — future polish, not urgent.
+
+  Hit a copy-paste bug while adapting the income section's icon buttons for bills: the JSX
+  variable (`i` → `b`) got fixed, but two function calls were left pointing at the wrong
+  handlers entirely — `setEditingIncomeId(b.id)` and `handleDeleteIncome(b.id)` instead of
+  the bill-specific versions. Symptom was subtle: no error, button just did nothing (it was
+  setting `editingIncomeId`, which nothing in the bills section checks). VS Code's own
+  TypeScript hints had flagged this before it was addressed. Fixed by correcting both calls
+  to `setEditingBillId(b.id)` and `handleDeleteBill(b.id)`. **Tested and confirmed working —
+  Phase 1 is now fully, genuinely complete**: full CRUD with polished inline-edit icon UI for
+  both Income Sources and Bills.
+
+**Pick up here — Phase 2, the Split Engine:**
+
+Build the real pay-schedule-aware cashflow calculator and split-suggestion logic, replacing
+the placeholder `isCashflowRisk()` function in `packages/shared`. This is the heart of the
+product — the feature that makes this different from a plain budgeting app. Rough shape:
+for each bill, check whether its due date falls in a pay period where cumulative bills
+exceed available income, and if so, whether splitting it into two payments aligned to two
+paydays would smooth out that cashflow strain. This is deterministic math (rules engine),
+not AI — Phase 3 (AI layer) later just explains this output in plain English.
 
 **Standing lessons/habits to keep in mind going forward** (learned the hard way this project):
 - With `--src-dir` enabled, config files like `proxy.ts` belong inside `src/`, at the same
