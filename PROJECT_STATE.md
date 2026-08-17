@@ -157,6 +157,20 @@ The LLM only explains/prioritizes those numbers in plain English — it does not
   entered the red zone") rather than a new notification system. Not yet built — logged as
   visual-polish work to tackle once Phase 2's core split-suggestion logic is complete, so the
   two pieces of work don't get half-finished in parallel.
+- **Email payment-confirmation scanning** (added 2026-07-19, user idea, researched): opt-in
+  feature to search a user's email (via Gmail API OAuth, read-only scope) for payment
+  confirmation emails ("thank you for your payment," receipts, etc.) to help auto-detect
+  bills paid without requiring 100% manual entry. Researched cost: **fits net-zero well**,
+  unlike Plaid — Gmail API is free for standard use (search/read against the user's own
+  inbox), not a paid third-party aggregation service. One honest caveat: Google announced
+  usage-based billing for quota overages is coming later in 2026 with 90+ days notice before
+  activating, but our use case (periodic targeted search, not high-volume) would stay
+  comfortably within free quota. Design principles: must be an explicit, separate opt-in
+  toggle (never assumed/default-on), request only Gmail's read-only scope (never send/modify
+  access), search for specific patterns rather than ingesting full inbox contents, and pair
+  naturally with the Phase 3 AI layer for extracting amount/date/biller from matched emails
+  (same "AI-parsed structured extraction" pattern already planned for statement uploads).
+  Not yet built — good candidate for a Phase 4/5-adjacent future phase.
 
 - **2026-07-19 (cont'd, late)**: User identified a real, meaningful flaw: the dashboard's
   "Total Income" and "Remaining" cards were disconnected from the accurate, timing-aware
