@@ -113,6 +113,11 @@ The LLM only explains/prioritizes those numbers in plain English — it does not
   **Status: detection is built (`isThreePaycheckMonth` on every period); the "opportunity"
   framing/suggestions for 3-paycheck months specifically is not yet built into
   `generateSplitSuggestions()` — currently it only reacts to shortfalls, not surplus months.**
+  **2026-07-19: manually tested end to end with a real shortfall scenario** (added a bill
+  large enough to push a period into deficit, marked it splittable) — Pay Periods correctly
+  flipped to "Short $X.XX," and the Split Suggestions card correctly appeared showing the
+  bill with accurate reasoning. **Core Phase 2 split-suggestion logic confirmed fully working
+  end to end**, not just theoretically wired.
 - [ ] **Phase 3 — AI Coaching Layer**: `AIProvider` interface (Ollama default, Gemini fallback), plain-English suggestions endpoint
 - [ ] **Phase 3.5 — Usage Governor**: `AIUsageLog` table, daily ceiling check before every AI call, response caching keyed on bill/income snapshot, graceful fallback to rules-engine-only output, admin usage-visibility endpoint
 - [ ] **Phase 4 — Statement Import & Trend Analysis**: user-initiated CSV/PDF bank statement
@@ -234,11 +239,12 @@ finalized when Phase 1 UI work begins.
 
 ## 7. Current Status
 
-**Phase:** Phase 1 complete. **Phase 2 core logic complete** — pay periods, 3-paycheck-month
-detection, shortfall calculation, and split suggestions all built and wired end to end, no
-errors. Two known gaps before calling Phase 2 fully done: (1) not yet tested against a real
-deliberate shortfall scenario, (2) 3-paycheck-month "opportunity" suggestions (prepay/buffer)
-not yet built — current suggestions only react to shortfalls, not surplus months.
+**Phase:** Phase 1 complete. **Phase 2 core logic complete AND tested end to end** — pay
+periods, 3-paycheck-month detection, shortfall calculation, and split suggestions all built,
+wired, and manually verified working against a real shortfall scenario. One known remaining
+gap: 3-paycheck-month "opportunity" suggestions (prepay/buffer) not yet built — current
+suggestions only react to shortfalls, not surplus months. That's the natural next piece, or
+Phase 3 (AI coaching layer) is also a reasonable next direction.
 **Last updated:** 2026-07-19 (late)
 
 ---
