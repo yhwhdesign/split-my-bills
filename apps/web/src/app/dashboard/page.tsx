@@ -1,6 +1,5 @@
 "use client";
 
-import { Pencil, Trash2, Check, X } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -13,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Pencil, Trash2, Check, X, CheckCircle2, Circle } from "lucide-react";
 
 type IncomeSource = {
   id: string;
@@ -29,27 +29,33 @@ type Bill = {
   dueDate: number;
   category: string | null;
   splittable: boolean;
+  paidThisMonth: boolean;
 };
 
 export default function DashboardPage() {
   const router = useRouter();
   const [income, setIncome] = useState<IncomeSource[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
+  const [periods, setPeriods] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingIncomeId, setEditingIncomeId] = useState<string | null>(null);
   const [editingBillId, setEditingBillId] = useState<string | null>(null);
+  const [expandedPeriod, setExpandedPeriod] = useState<number | null>(null);
 
   useEffect(() => {
     loadData();
   }, []);
 
   async function loadData() {
-    const [incomeRes, billsRes] = await Promise.all([
+    const [incomeRes, billsRes, periodsRes] = await Promise.all([
       fetch("/api/income"),
       fetch("/api/bills"),
+      fetch("/api/split-suggestions"),
     ]);
     setIncome(await incomeRes.json());
     setBills(await billsRes.json());
+    const periodsData = await periodsRes.json();
+    setPeriods(periodsData.periods ?? []);
     setLoading(false);
   }
 
@@ -58,16 +64,6 @@ export default function DashboardPage() {
     router.push("/login");
     router.refresh();
   }
-
-  async function handleDeleteIncome(id: string) {
-  await fetch(`/api/income/${id}`, { method: "DELETE" });
-  loadData();
-}
-
-async function handleDeleteBill(id: string) {
-  await fetch(`/api/bills/${id}`, { method: "DELETE" });
-  loadData();
-}
 
   async function handleAddIncome(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -106,25 +102,42 @@ async function handleDeleteBill(id: string) {
     loadData();
   }
 
-  async function handleUpdateIncome(id: string, amount: string) {
-  await fetch(`/api/income/${id}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ amount: Number(amount) }),
-  });
-  setEditingIncomeId(null);
-  loadData();
-}
+  async function handleDeleteIncome(id: string) {
+    await fetch(`/api/income/${id}`, { method: "DELETE" });
+    loadData();
+  }
 
-async function handleUpdateBill(id: string, amount: string) {
-  await fetch(`/api/bills/${id}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ amount: Number(amount) }),
-  });
-  setEditingBillId(null);
-  loadData();
-}
+  async function handleDeleteBill(id: string) {
+    await fetch(`/api/bills/${id}`, { method: "DELETE" });
+    loadData();
+  }
+
+  async function handleUpdateIncome(id: string, amount: string) {
+    await fetch(`/api/income/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount: Number(amount) }),
+    });
+    setEditingIncomeId(null);
+    loadData();
+  }
+
+  async function handleUpdateBill(id: string, amount: string) {
+    await fetch(`/api/bills/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount: Number(amount) }),
+    });
+    setEditingBillId(null);
+    loadData();
+  }
+
+  async function handleTogglePaid(billId: string, currentlyPaid: boolean) {
+    await fetch(`/api/bills/${billId}/pay`, {
+      method: currentlyPaid ? "DELETE" : "POST",
+    });
+    loadData();
+  }
 
   const totalIncome = income.reduce((sum, i) => sum + Number(i.amount), 0);
   const totalBills = bills.reduce((sum, b) => sum + Number(b.amount), 0);
@@ -159,12 +172,72 @@ async function handleUpdateBill(id: string, amount: string) {
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Remaining</CardDescription>
-            <CardTitle className={`text-2xl ${remaining < 0 ? "text-destructive" : "text-primary"}`}>
+            <CardTitle
+              className={`text-2xl ${remaining < 0 ? "text-destructive" : "text-primary"}`}
+            >
               ${remaining.toFixed(2)}
             </CardTitle>
           </CardHeader>
         </Card>
       </div>
+
+      {periods.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Upcoming Pay Periods</CardTitle>
+            <CardDescription>Based on your pay schedule and bills</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {periods.map((p, idx) => (
+              <div
+                key={idx}
+                className={`rounded-md border text-sm ${
+                  p.isCashflowRisk ? "border-destructive/50 bg-destructive/5" : "border-border"
+                }`}
+              >
+                <button
+                  onClick={() => setExpandedPeriod(expandedPeriod === idx ? null : idx)}
+                  className="flex w-full items-center justify-between p-3 text-left"
+                >
+                  <div>
+                    <div className="font-medium">
+                      {new Date(p.payDate).toLocaleDateString()}
+                      {p.isThreePaycheckMonth && (
+                        <span className="ml-2 text-xs text-primary">3-paycheck month</span>
+                      )}
+                    </div>
+                    <div className="text-muted-foreground text-xs">
+                      {p.bills.length} bill{p.bills.length !== 1 ? "s" : ""} — $
+                      {p.totalBillAmount.toFixed(2)} due
+                    </div>
+                  </div>
+                  {p.isCashflowRisk ? (
+                    <span className="text-destructive text-xs font-medium">
+                      Short ${p.shortfall.toFixed(2)}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground text-xs">OK</span>
+                  )}
+                </button>
+
+                {expandedPeriod === idx && p.bills.length > 0 && (
+                  <div className="border-t px-3 py-2 space-y-1">
+                    {p.bills.map((item: any, i: number) => (
+                      <div
+                        key={i}
+                        className="flex justify-between text-xs text-muted-foreground"
+                      >
+                        <span>{item.bill.name}</span>
+                        <span>${item.bill.amount.toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-2 gap-8">
         <Card>
@@ -233,7 +306,18 @@ async function handleUpdateBill(id: string, amount: string) {
           <CardContent className="space-y-4">
             {bills.map((b) => (
               <div key={b.id} className="flex items-center justify-between text-sm border-b pb-2">
-                <span>{b.name} (due {b.dueDate})</span>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => handleTogglePaid(b.id, b.paidThisMonth)}>
+                    {b.paidThisMonth ? (
+                      <CheckCircle2 size={16} className="text-primary" />
+                    ) : (
+                      <Circle size={16} className="text-muted-foreground/40" />
+                    )}
+                  </button>
+                  <span className={b.paidThisMonth ? "text-muted-foreground line-through" : ""}>
+                    {b.name} (due {b.dueDate})
+                  </span>
+                </div>
                 <div className="flex items-center gap-2">
                   {editingBillId === b.id ? (
                     <EditAmountForm
@@ -245,17 +329,17 @@ async function handleUpdateBill(id: string, amount: string) {
                     <>
                       <span>${Number(b.amount).toFixed(2)}</span>
                       <button
-                      onClick={() => setEditingBillId(b.id)}
-                      className="text-muted-foreground/50 hover:text-primary transition-colors"
-                    >
-                      <Pencil size={14} />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteBill(b.id)}
-                      className="text-muted-foreground/50 hover:text-destructive transition-colors"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                        onClick={() => setEditingBillId(b.id)}
+                        className="text-muted-foreground/50 hover:text-primary transition-colors"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteBill(b.id)}
+                        className="text-muted-foreground/50 hover:text-destructive transition-colors"
+                      >
+                        <Trash2 size={14} />
+                      </button>
                     </>
                   )}
                 </div>
@@ -286,8 +370,9 @@ async function handleUpdateBill(id: string, amount: string) {
       </div>
     </main>
   );
+}
 
-  function EditAmountForm({
+function EditAmountForm({
   initialValue,
   onSave,
   onCancel,
@@ -308,15 +393,12 @@ async function handleUpdateBill(id: string, amount: string) {
         className="h-7 w-24 text-sm"
         autoFocus
       />
-      <button 
-        onClick={() => onSave(value)} className="text-primary hover:opacity-80">
-          <Check size={16} />
+      <button onClick={() => onSave(value)} className="text-primary hover:opacity-80">
+        <Check size={16} />
       </button>
-      <button
-        onClick={onCancel} className="text-muted-foreground/50 hover:text-foreground">
-          <X size={16} />
+      <button onClick={onCancel} className="text-muted-foreground/50 hover:text-foreground">
+        <X size={16} />
       </button>
     </div>
   );
-}
 }

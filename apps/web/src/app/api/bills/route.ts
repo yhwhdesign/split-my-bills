@@ -8,12 +8,27 @@ export async function GET() {
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
   const bills = await prisma.bill.findMany({
     where: { userId },
     orderBy: { dueDate: "asc" },
+    include: {
+      payments: {
+        where: { status: "PAID", paidDate: { gte: startOfMonth } },
+        orderBy: { paidDate: "desc" },
+        take: 1,
+      },
+    },
   });
 
-  return NextResponse.json(bills);
+  const billsWithPaidStatus = bills.map((b) => ({
+    ...b,
+    paidThisMonth: b.payments.length > 0,
+  }));
+
+  return NextResponse.json(billsWithPaidStatus);
 }
 
 export async function POST(request: NextRequest) {

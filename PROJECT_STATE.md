@@ -100,7 +100,14 @@ The LLM only explains/prioritizes those numbers in plain English — it does not
   (✅ **fully complete** — create/read/update/delete all working end to end, inline-edit UI
   built), dashboard showing income vs. bills vs. remaining (✅ complete) — **Phase 1 complete**
 - [ ] **Phase 2 — Split Engine**: pay-schedule-aware cashflow calculator, split suggestion logic
-  (not started — only a placeholder `isCashflowRisk()` exists in `packages/shared`)
+  (not started — only a placeholder `isCashflowRisk()` exists in `packages/shared`).
+  **Explicit scope addition (2026-07-19, from real user experience):** biweekly/weekly pay
+  schedules produce a genuine "3-paycheck month" roughly twice a year (26 biweekly paychecks
+  don't divide evenly into 12 months) — a common real situation most budgeting apps ignore.
+  The engine must detect these months explicitly and treat the "extra" paycheck as a planning
+  opportunity (build buffer, prepay a splittable bill, or prepare for the following leaner
+  2-paycheck month) rather than letting it blend into normal spending unnoticed. This is a
+  strong showcase for both the split-suggestion feature and the AI coaching layer.
 - [ ] **Phase 3 — AI Coaching Layer**: `AIProvider` interface (Ollama default, Gemini fallback), plain-English suggestions endpoint
 - [ ] **Phase 3.5 — Usage Governor**: `AIUsageLog` table, daily ceiling check before every AI call, response caching keyed on bill/income snapshot, graceful fallback to rules-engine-only output, admin usage-visibility endpoint
 - [ ] **Phase 4 — Statement Import & Trend Analysis**: user-initiated CSV/PDF bank statement
@@ -125,6 +132,28 @@ The LLM only explains/prioritizes those numbers in plain English — it does not
   visually group "Recurring" vs "One-time" bills on the dashboard instead of one flat list
   (`isRecurring` field already exists on `Bill`, just needs UI work); trend indicator
   (up/down arrow vs. last period) on the "Remaining" summary card instead of a flat snapshot.
+- **"Remaining" definition confirmed** (2026-07-19): stays a budget-snapshot number
+  (Income − ALL bills, paid or not), not a live cash balance — user confirmed this is correct
+  since there's no bank connection to track true real-time balance against anyway.
+- **Upcoming Pay Periods — visual polish for later** (2026-07-19): once more color/theming
+  work happens, the expandable period header and its dropdown bill-list body should use
+  visually distinct background colors/shades (header vs. expanded content), not the same
+  surface — pure eye-candy, low priority, revisit during a dedicated visual-polish pass.
+- **"Remaining" card color gradient + warning icon** (added 2026-07-19, user idea): instead
+  of the current binary red/primary color logic, grade the "Remaining" card's background
+  through green → yellow → red based on how much buffer remains (not just negative-or-not),
+  with a warning icon appearing once it crosses into the red zone. Ties directly into the
+  already-planned push notifications (Phase 5) — a new trigger condition ("remaining balance
+  entered the red zone") rather than a new notification system. Not yet built — logged as
+  visual-polish work to tackle once Phase 2's core split-suggestion logic is complete, so the
+  two pieces of work don't get half-finished in parallel.
+- **Overdue bill reconciliation prompt** (added 2026-07-19, user idea, low priority): once a
+  bill's due date passes without it being marked paid, prompt the user ("Was this paid?")
+  rather than letting it silently go unconfirmed. If yes, let them pick the actual paid date
+  (no schema change needed — `Payment.paidDate` already supports this, current mark-as-paid
+  just always defaults to "today"). If the recorded paid date is after the due date, show a
+  small "(paid late)" label next to the bill name. Purely additive to the existing mark-as-paid
+  feature — does not touch the "Remaining" calculation or require reworking anything shipped.
 
 **Design Direction** (added 2026-07-17): References are BillOut (calm, organized, card-based
 layout, sparing color-as-accent) + 1Bill (bolder, more saturated color confidence, friendlier
@@ -381,6 +410,49 @@ live totals (Income / Bills / Remaining). Everything is committed and pushed to 
   to `setEditingBillId(b.id)` and `handleDeleteBill(b.id)`. **Tested and confirmed working —
   Phase 1 is now fully, genuinely complete**: full CRUD with polished inline-edit icon UI for
   both Income Sources and Bills.
+
+- **2026-07-19 (cont'd)**: Started Phase 2 (Split Engine). Built `getUpcomingPayDates()` in
+  `packages/shared` — generates real calendar pay dates from a user's pay schedule + anchor
+  date within a rolling window (default 60 days), handling all four schedule types including
+  the trickier `SEMIMONTHLY` case (snapped to 1st/15th convention, most common real-world
+  pattern). User explained a real, important use case: biweekly pay produces a genuine
+  "3-paycheck month" about twice a year (26 paychecks don't divide evenly into 12 months) —
+  a real financial-planning wrinkle at their job that most budgeting apps ignore entirely.
+  Added `groupPayDatesByMonth()` to explicitly detect and flag these months
+  (`isThreePaycheckMonth`), so downstream logic (cashflow calculator, split suggestions, and
+  eventually AI narration) can treat the "extra" paycheck as a deliberate planning
+  opportunity rather than something that just blends into normal spending. Logged as explicit
+  Phase 2 scope, not just a side note.
+
+- **2026-07-19 (cont'd)**: Built `projectBillDueDates()` and `calculatePayPeriods()` in
+  `packages/shared` — the core Phase 2 cashflow engine. Projects a bill's day-of-month due
+  date into real calendar dates, slots each bill into the pay period it falls in (the stretch
+  between one payday and the next), and flags any period where total bills exceed that
+  period's income (`isCashflowRisk`, with an exact `shortfall` dollar amount) — with
+  3-paycheck-month detection baked in per period from the earlier work. Hit a real bug: the
+  original `PaySchedule` type (from session one, before the real Prisma schema existed) used
+  lowercase values (`"weekly"`, etc.), colliding with the new uppercase-based logic that
+  matches the actual schema — TypeScript correctly flagged the mismatch. Fixed by updating
+  the original type definition to uppercase, matching reality everywhere else in the app.
+
+  Built `/api/split-suggestions` (sums all income sources against the user's pay schedule —
+  noted as a simplification for users with multiple differently-scheduled income sources,
+  a future refinement) and wired an "Upcoming Pay Periods" card into the dashboard showing
+  each period's date, bill count/total, risk status, and 3-paycheck-month flag.
+
+  Added a real "mark as paid" feature, using the `Payment` model that had existed in the
+  schema since session one but was never wired up: `POST`/`DELETE /api/bills/[id]/pay`
+  creates/removes a `Payment` record for the current month, `GET /api/bills` now includes
+  `paidThisMonth` per bill, and the dashboard shows a clickable check-circle icon with
+  strikethrough styling for paid bills.
+
+  Discussed whether "Remaining" should change based on paid status — clarified and confirmed
+  it stays a budget-snapshot number (Income − ALL bills, paid or not matters for the monthly
+  plan either way), not a live cash balance, since there's no bank connection to track a true
+  real-time balance against. Also made the "Upcoming Pay Periods" list expandable — clicking
+  a period's header reveals the individual bills within it in smaller muted text; logged a
+  future visual-polish idea (distinct header vs. dropdown background colors) for later.
+  **All of the above tested and confirmed working.**
 
 **Pick up here — Phase 2, the Split Engine:**
 
