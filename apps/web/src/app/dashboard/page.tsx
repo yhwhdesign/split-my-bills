@@ -55,8 +55,9 @@ export default function DashboardPage() {
     ]);
     setIncome(await incomeRes.json());
     setBills(await billsRes.json());
-    const periodsData = await periodsRes.json();
+   const periodsData = await periodsRes.json();
     setPeriods(periodsData.periods ?? []);
+    setSuggestions(periodsData.suggestions ?? []);
     setLoading(false);
   }
 
@@ -147,6 +148,8 @@ export default function DashboardPage() {
   const totalBills = bills.reduce((sum, b) => sum + Number(b.amount), 0);
   const currentPeriod = periods.length > 0 ? periods[0] : null;
   const periodRemaining = currentPeriod ? currentPeriod.income - currentPeriod.totalBillAmount : totalIncome - totalBills;
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+
 
   if (loading) {
     return <main className="p-8">Loading...</main>;
@@ -247,6 +250,32 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       )}
+
+      {suggestions.length > 0 && (
+  <Card className="border-primary/30 bg-primary/5">
+    <CardHeader>
+      <CardTitle>Split Suggestions</CardTitle>
+      <CardDescription>Ways to smooth out tight pay periods</CardDescription>
+    </CardHeader>
+    <CardContent className="space-y-3">
+      {suggestions.map((s, idx) => (
+        <div key={idx} className="rounded-md border border-primary/20 bg-background p-3 text-sm">
+          <div className="flex items-center justify-between">
+            <span className="font-medium">{s.billName}</span>
+            <span
+              className={`text-xs font-medium ${
+                s.wouldResolve ? "text-primary" : "text-muted-foreground"
+              }`}
+            >
+              {s.wouldResolve ? "Resolves shortfall" : "Partial help"}
+            </span>
+          </div>
+          <p className="text-muted-foreground text-xs mt-1">{s.reasoning}</p>
+        </div>
+      ))}
+    </CardContent>
+  </Card>
+)}
 
       <div className="grid grid-cols-2 gap-8">
         <Card>

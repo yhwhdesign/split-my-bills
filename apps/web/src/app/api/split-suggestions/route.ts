@@ -1,7 +1,7 @@
+import { calculatePayPeriods, generateSplitSuggestions, type Bill, type PaySchedule } from "@split-my-bills/shared";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/session";
-import { calculatePayPeriods, type Bill, type PaySchedule } from "@split-my-bills/shared";
 
 export async function GET() {
   const userId = await getCurrentUserId();
@@ -28,11 +28,15 @@ export async function GET() {
   }));
 
   const periods = calculatePayPeriods(
-    totalIncome,
-    user.paySchedule as PaySchedule,
-    user.paydayAnchor,
-    sharedBills
-  );
+  totalIncome,
+  user.paySchedule as PaySchedule,
+  user.paydayAnchor,
+  sharedBills
+);
+
+const suggestions = generateSplitSuggestions(periods);
+
+return NextResponse.json({ periods, suggestions });
 
   return NextResponse.json({ periods });
 }

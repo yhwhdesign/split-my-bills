@@ -99,8 +99,10 @@ The LLM only explains/prioritizes those numbers in plain English — it does not
 - [x] **Phase 1 — Core MVP**: auth (✅ complete, verified), manual income/bill CRUD
   (✅ **fully complete** — create/read/update/delete all working end to end, inline-edit UI
   built), dashboard showing income vs. bills vs. remaining (✅ complete) — **Phase 1 complete**
-- [ ] **Phase 2 — Split Engine**: pay-schedule-aware cashflow calculator, split suggestion logic
-  (not started — only a placeholder `isCashflowRisk()` exists in `packages/shared`).
+- [x] **Phase 2 — Split Engine**: pay-schedule-aware cashflow calculator, split suggestion logic
+  — **core logic complete**: pay periods, 3-paycheck-month detection, shortfall calculation,
+  and split suggestions all built, wired end to end, and verified with no errors. Not yet
+  manually tested against a real/deliberate shortfall scenario, but logic confirmed sound.
   **Explicit scope addition (2026-07-19, from real user experience):** biweekly/weekly pay
   schedules produce a genuine "3-paycheck month" roughly twice a year (26 biweekly paychecks
   don't divide evenly into 12 months) — a common real situation most budgeting apps ignore.
@@ -108,6 +110,9 @@ The LLM only explains/prioritizes those numbers in plain English — it does not
   opportunity (build buffer, prepay a splittable bill, or prepare for the following leaner
   2-paycheck month) rather than letting it blend into normal spending unnoticed. This is a
   strong showcase for both the split-suggestion feature and the AI coaching layer.
+  **Status: detection is built (`isThreePaycheckMonth` on every period); the "opportunity"
+  framing/suggestions for 3-paycheck months specifically is not yet built into
+  `generateSplitSuggestions()` — currently it only reacts to shortfalls, not surplus months.**
 - [ ] **Phase 3 — AI Coaching Layer**: `AIProvider` interface (Ollama default, Gemini fallback), plain-English suggestions endpoint
 - [ ] **Phase 3.5 — Usage Governor**: `AIUsageLog` table, daily ceiling check before every AI call, response caching keyed on bill/income snapshot, graceful fallback to rules-engine-only output, admin usage-visibility endpoint
 - [ ] **Phase 4 — Statement Import & Trend Analysis**: user-initiated CSV/PDF bank statement
@@ -164,6 +169,25 @@ The LLM only explains/prioritizes those numbers in plain English — it does not
   "Cannot access before initialization" runtime error; fixed by reordering the declarations.
   **Confirmed working and looking meaningfully better** — this was a real correctness fix,
   not just a cosmetic one.
+
+- **2026-07-19 (cont'd, late)**: Built `generateSplitSuggestions()` in `packages/shared` —
+  the actual split-suggestion logic that completes Phase 2's core purpose. For each risky
+  pay period, checks every splittable bill in it: calculates a straight half-now/half-next-
+  payday split, whether that split would fully resolve the period's shortfall or just reduce
+  it, and generates a plain-text reasoning string (structured output that Phase 3's AI layer
+  will later turn into fuller coaching, per the original rules-engine-computes /
+  AI-explains design principle). Wired into `/api/split-suggestions` (now returns both
+  `periods` and `suggestions`) and a new dashboard card, visually distinct via a soft
+  primary-tinted background — first real functional use of the indigo accent color, not just
+  decorative. Confirmed no errors; card correctly shows nothing when there's no shortfall/
+  no splittable bills in a risky period yet (expected behavior with current test data, not a
+  bug) — full end-to-end trigger not yet manually tested with a real shortfall scenario, but
+  logic and wiring confirmed sound.
+
+  **Phase 2's core logic is now essentially complete**: pay period generation, 3-paycheck-
+  month detection, cashflow risk/shortfall calculation, and split suggestions all built and
+  wired end to end. Remaining Phase 2 work is mostly testing edge cases (e.g., confirming a
+  real shortfall scenario end to end) rather than new logic.
 - **Overdue bill reconciliation prompt** (added 2026-07-19, user idea, low priority): once a
   bill's due date passes without it being marked paid, prompt the user ("Was this paid?")
   rather than letting it silently go unconfirmed. If yes, let them pick the actual paid date
@@ -210,10 +234,12 @@ finalized when Phase 1 UI work begins.
 
 ## 7. Current Status
 
-**Phase:** **Phase 1 is fully COMPLETE** — auth, and full CRUD (create/read/update/delete)
-for Income Sources and Bills, all verified working end to end with a polished inline-edit UI.
-Next: Phase 2, the split-suggestion engine — the app's core differentiator.
-**Last updated:** 2026-07-19
+**Phase:** Phase 1 complete. **Phase 2 core logic complete** — pay periods, 3-paycheck-month
+detection, shortfall calculation, and split suggestions all built and wired end to end, no
+errors. Two known gaps before calling Phase 2 fully done: (1) not yet tested against a real
+deliberate shortfall scenario, (2) 3-paycheck-month "opportunity" suggestions (prepay/buffer)
+not yet built — current suggestions only react to shortfalls, not surplus months.
+**Last updated:** 2026-07-19 (late)
 
 ---
 
