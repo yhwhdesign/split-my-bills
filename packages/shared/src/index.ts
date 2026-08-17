@@ -176,3 +176,16 @@ export function calculatePayPeriods(
 
   return periods;
 }
+
+export function normalizeToMonthly(amount: number, frequency: PaySchedule): number {
+  switch (frequency) {
+    case "WEEKLY":
+      return (amount * 52) / 12;
+    case "BIWEEKLY":
+      return (amount * 26) / 12;
+    case "SEMIMONTHLY":
+      return amount * 2;
+    case "MONTHLY":
+      return amount;
+  }
+}

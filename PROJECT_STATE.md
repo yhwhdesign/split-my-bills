@@ -147,6 +147,23 @@ The LLM only explains/prioritizes those numbers in plain English — it does not
   entered the red zone") rather than a new notification system. Not yet built — logged as
   visual-polish work to tackle once Phase 2's core split-suggestion logic is complete, so the
   two pieces of work don't get half-finished in parallel.
+
+- **2026-07-19 (cont'd, late)**: User identified a real, meaningful flaw: the dashboard's
+  "Total Income" and "Remaining" cards were disconnected from the accurate, timing-aware
+  Pay Periods engine already built — "Total Income" summed raw per-paycheck amounts with no
+  regard for pay frequency (a biweekly $1,000 paycheck showed as "$1,000/month" instead of
+  the true ~$2,166/month equivalent), and "Remaining" was a flat `Income − Bills` guess that
+  ignored actual due dates and paycheck timing entirely, contradicting the correct
+  period-by-period risk data already shown lower on the page. Fixed by adding
+  `normalizeToMonthly()` to `packages/shared` (converts any pay frequency to a true monthly
+  equivalent) and changing "Remaining" to source from the nearest actual pay period
+  (`currentPeriod.income - currentPeriod.totalBillAmount`) instead of a flat calculation —
+  so it now uses the same engine as the Pay Periods list and the two will never contradict
+  each other. Hit a variable-ordering bug (`periodRemaining` referenced `totalBills` before
+  its declaration — a genuine mistake in the given code, not a user error) causing a
+  "Cannot access before initialization" runtime error; fixed by reordering the declarations.
+  **Confirmed working and looking meaningfully better** — this was a real correctness fix,
+  not just a cosmetic one.
 - **Overdue bill reconciliation prompt** (added 2026-07-19, user idea, low priority): once a
   bill's due date passes without it being marked paid, prompt the user ("Was this paid?")
   rather than letting it silently go unconfirmed. If yes, let them pick the actual paid date

@@ -1,5 +1,6 @@
 "use client";
 
+import { normalizeToMonthly, type PaySchedule } from "@split-my-bills/shared";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -139,9 +140,13 @@ export default function DashboardPage() {
     loadData();
   }
 
-  const totalIncome = income.reduce((sum, i) => sum + Number(i.amount), 0);
+  const totalIncome = income.reduce(
+    (sum, i) => sum + normalizeToMonthly(Number(i.amount), i.frequency as PaySchedule),
+  0
+  );
   const totalBills = bills.reduce((sum, b) => sum + Number(b.amount), 0);
-  const remaining = totalIncome - totalBills;
+  const currentPeriod = periods.length > 0 ? periods[0] : null;
+  const periodRemaining = currentPeriod ? currentPeriod.income - currentPeriod.totalBillAmount : totalIncome - totalBills;
 
   if (loading) {
     return <main className="p-8">Loading...</main>;
@@ -170,15 +175,19 @@ export default function DashboardPage() {
           </CardHeader>
         </Card>
         <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Remaining</CardDescription>
-            <CardTitle
-              className={`text-2xl ${remaining < 0 ? "text-destructive" : "text-primary"}`}
-            >
-              ${remaining.toFixed(2)}
-            </CardTitle>
-          </CardHeader>
-        </Card>
+  <CardHeader className="pb-2">
+    <CardDescription>
+      {currentPeriod
+        ? `Remaining (through ${new Date(currentPeriod.end).toLocaleDateString()})`
+        : "Remaining"}
+    </CardDescription>
+    <CardTitle
+      className={`text-2xl ${periodRemaining < 0 ? "text-destructive" : "text-primary"}`}
+    >
+      ${periodRemaining.toFixed(2)}
+    </CardTitle>
+  </CardHeader>
+</Card>
       </div>
 
       {periods.length > 0 && (
