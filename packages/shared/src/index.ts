@@ -189,3 +189,57 @@ export function normalizeToMonthly(amount: number, frequency: PaySchedule): numb
       return amount;
   }
 }
+
+export interface SplitSuggestion {
+  billId: string;
+  billName: string;
+  billAmount: number;
+  periodStart: Date;
+  currentShortfall: number;
+  splitAmount: number;
+  wouldResolve: boolean;
+  reasoning: string;
+}
+
+export function generateSplitSuggestions(periods: PayPeriod[]): SplitSuggestion[] {
+  const suggestions: SplitSuggestion[] = [];
+
+  for (let i = 0; i < periods.length; i++) {
+    const period = periods[i];
+    if (!period.isCashflowRisk) continue;
+
+    const nextPeriod = periods[i + 1];
+
+    for (const { bill } of period.bills) {
+      if (!bill.splittable) continue;
+
+      const splitAmount = bill.amount / 2;
+      const newShortfall = period.shortfall - splitAmount;
+      const wouldResolve = newShortfall <= 0;
+
+      let reasoning: string;
+      if (wouldResolve) {
+        reasoning = `Splitting ${bill.name} into two $${splitAmount.toFixed(2)} payments would fully cover this period's $${period.shortfall.toFixed(2)} shortfall.`;
+      } else {
+        reasoning = `Splitting ${bill.name} would reduce this period's shortfall from $${period.shortfall.toFixed(2)} to $${newShortfall.toFixed(2)}, but wouldn't fully resolve it.`;
+      }
+
+      if (nextPeriod && wouldResolve) {
+        reasoning += ` The remaining $${splitAmount.toFixed(2)} would be due on ${nextPeriod.payDate.toDateString()}.`;
+      }
+
+      suggestions.push({
+        billId: bill.id,
+        billName: bill.name,
+        billAmount: bill.amount,
+        periodStart: period.start,
+        currentShortfall: period.shortfall,
+        splitAmount,
+        wouldResolve,
+        reasoning,
+      });
+    }
+  }
+
+  return suggestions;
+}
