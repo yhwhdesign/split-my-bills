@@ -31,6 +31,13 @@ would ease cashflow strain.
 - **Branch workflow**: `main` only receives merges from `dev` after work is tested and
   confirmed. All day-to-day work happens on `dev` (or feature branches off `dev`, once
   real feature work starts). Never commit directly to `main`.
+- **Deployment**: live app is on Vercel (free tier), connected to GitHub. `main` is linked
+  as the production branch — merging `dev` → `main` and pushing will auto-deploy to
+  https://split-my-bills.vercel.app (confirm this auto-deploy behavior is actually enabled/
+  desired before relying on it; so far deploys have been triggered manually via `vercel --prod`).
+  Environment variables (`DATABASE_URL`, `AUTH_SECRET`) are set in the Vercel dashboard
+  separately from local `.env` — they don't sync automatically, must be updated in both
+  places if changed.
 - **How users get bill data in: manual entry + user-initiated statement upload only.**
   No live bank-account connection (Plaid or similar) in the free/core product — researched
   2026-07-17 and confirmed Plaid has no lasting free tier for production use (real costs,
@@ -155,6 +162,46 @@ The LLM only explains/prioritizes those numbers in plain English — it does not
   entered the red zone") rather than a new notification system. Not yet built — logged as
   visual-polish work to tackle once Phase 2's core split-suggestion logic is complete, so the
   two pieces of work don't get half-finished in parallel.
+- **Calendar visualization for pay dates + bill due dates** (added 2026-07-20, user idea):
+  after a user's first income source is entered, show a calendar (month and/or year view)
+  plotting small colored dots on paydays — extendable to also plot bill due dates in a
+  different color. User-customizable dot colors (future settings page). Same-day overlaps
+  should stack distinct dots rather than merge colors, so nothing gets hidden. **Technically
+  well-positioned to build**: `getUpcomingPayDates()` and `projectBillDueDates()` already
+  generate real calendar dates for exactly this purpose — currently capped at a 60-day
+  rolling window for the cashflow engine, would just need extending to a full-year window
+  for calendar display. Good pairing with Phase 2's existing risk detection — seeing pay
+  dates and bill dates on the same calendar makes shortfall periods visually obvious. Not
+  yet built — good candidate for a dedicated visual/UX phase.
+- **Collapsible "add income" form + calendar placement** (added 2026-07-20, user idea): once
+  at least one income source exists, collapse/shrink the add-income form (currently always
+  visible) and replace it with an "Add more income" button that expands the form back down
+  when clicked. The form itself should include a "Done for now" button (alongside the
+  existing "Add Income" button) to collapse it back up. The pay-date calendar (see above)
+  should live directly under the Income Sources list, in this same collapsed/expanded flow.
+  On mobile specifically, likely wants a modal/sheet pattern instead of inline expand, for
+  space reasons — to be finalized during actual mobile-responsive UI work (Phase 5). Same
+  progressive-disclosure pattern likely worth applying to the Bills form too, for consistency.
+  Not yet built — UX/polish backlog, to tackle once core functionality (Phase 3+) is further
+  along.
+
+- **2026-07-20 (cont'd)**: Deployed to production on Vercel. Merged `dev` into `main` for the
+  first time since session one (resolved an expected merge conflict on `PROJECT_STATE.md` by
+  taking `dev`'s version, since `main` had been untouched since the initial commit — every
+  other file merged cleanly as new additions). Installed Vercel CLI, linked the GitHub repo,
+  created a new project with root directory set to `apps/web` (required since this is a
+  monorepo). Added `DATABASE_URL` and `AUTH_SECRET` as environment variables in the Vercel
+  dashboard (Settings → Environment Variables — distinct from the separate "Environments"
+  page, an easy mix-up), then redeployed with `vercel --prod` so they took effect. **Live at
+  https://split-my-bills.vercel.app** — confirmed working on a real phone over a real
+  internet connection, no local network/WiFi dependency. This also resolved the earlier
+  mobile-login bug investigation (form submitting as GET instead of via fetch) — deploying
+  bypassed it entirely rather than requiring further local debugging.
+
+  Confirmed expected next issue: **mobile layout needs real responsive design work** — current
+  dashboard uses desktop-first fixed grids (`grid-cols-2`, `grid-cols-3`), not yet adapted for
+  small screens. This is exactly what Phase 5 (PWA Polish, mobile-responsive UI pass) is for —
+  not a bug, a known and already-planned gap.
 - **Email payment-confirmation scanning** (added 2026-07-19, user idea, researched): opt-in
   feature to search a user's email (via Gmail API OAuth, read-only scope) for payment
   confirmation emails ("thank you for your payment," receipts, etc.) to help auto-detect
@@ -261,13 +308,13 @@ finalized when Phase 1 UI work begins.
 
 ## 7. Current Status
 
-**Phase:** Phase 1 complete. **Phase 2 core logic complete AND tested end to end** — pay
-periods, 3-paycheck-month detection, shortfall calculation, and split suggestions all built,
-wired, and manually verified working against a real shortfall scenario. One known remaining
-gap: 3-paycheck-month "opportunity" suggestions (prepay/buffer) not yet built — current
-suggestions only react to shortfalls, not surplus months. That's the natural next piece, or
-Phase 3 (AI coaching layer) is also a reasonable next direction.
-**Last updated:** 2026-07-19 (late)
+**Phase:** Phase 1 complete. Phase 2 FULLY COMPLETE. **App is now LIVE at
+https://split-my-bills.vercel.app** — deployed to Vercel, connected to the real Neon database,
+confirmed working on a real phone over a real internet connection. Known gap: mobile layout
+is not yet responsive (desktop-first grids) — expected, this is Phase 5 scope, not a bug.
+**Next: Phase 3 — the AI coaching layer**, turning structured rules-engine output into
+plain-English suggestions (Ollama for dev, Gemini Flash-Lite for production).
+**Last updated:** 2026-07-20 (deployed)
 
 ---
 
