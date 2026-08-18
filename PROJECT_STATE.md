@@ -185,6 +185,37 @@ The LLM only explains/prioritizes those numbers in plain English — it does not
   Not yet built — UX/polish backlog, to tackle once core functionality (Phase 3+) is further
   along.
 
+- **2026-07-20 (cont'd, Phase 3 started)**: Started Phase 3 (AI coaching layer). Installed
+  Ollama locally, pulled `llama3.1:8b`, confirmed working via `ollama run`. Built the
+  `AIProvider` interface (`src/lib/ai/provider.ts` — one method, `generateCoaching()`, takes
+  our already-computed Phase 2 structured data and returns plain-English text, per the
+  original "rules engine computes, AI explains" design principle) and `OllamaProvider`
+  implementation (`src/lib/ai/ollama-provider.ts`) with a carefully constructed prompt: hands
+  the model our pre-computed numbers rather than asking it to do math, includes tone/length
+  constraints (concise, warm, ~150 words), and explicitly instructs it to say things look
+  fine when they do rather than manufacturing false urgency. Tested directly via a standalone
+  script (`npx tsx src/lib/ai/test.ts`) against sample data — **confirmed working, produced
+  genuinely usable coaching output.** Noted a real, expected tradeoff: running the 8B model
+  locally briefly used significant CPU/resources during generation — confirms the reasoning
+  behind planning Gemini (not self-hosted Ollama) for production, since a live multi-user app
+  can't have every request bog down a shared server. Local dev experience only; doesn't
+  affect end users once Gemini is wired up. Noted `llama3.2:3b` as a lighter/faster local
+  model option if the 8B model's resource use becomes annoying during regular dev work.
+
+  Hit a real scare: local login started failing with `ECONNREFUSED` from Prisma while the
+  Vercel deployment worked fine. Root cause found by user: `apps/web/.env` had accidentally
+  been overwritten with unrelated content (from copy-pasting the project status file at some
+  point), corrupting `DATABASE_URL`. Fixed by restoring the correct value. **Lesson: keep
+  `.env` edits isolated — don't paste other file contents into the same editor session
+  without double-checking which file is active.** Confirmed working again locally.
+
+  **Next session starts here:** AI coaching card is built and wired (`/api/ai-coaching`,
+  dashboard card, `OllamaProvider`) but full end-to-end UI test was interrupted by the `.env`
+  issue — re-confirm the dashboard's "Your AI Coach" card renders real coaching text. Also
+  planned: try `llama3.2:3b` (or similar lighter model) for faster local responses during
+  testing, per user's note. After that, Gemini production provider + Usage Governor
+  (Phase 3.5) are the remaining pieces of Phase 3. Session paused here (near usage limit).
+
 - **2026-07-20 (cont'd)**: Deployed to production on Vercel. Merged `dev` into `main` for the
   first time since session one (resolved an expected merge conflict on `PROJECT_STATE.md` by
   taking `dev`'s version, since `main` had been untouched since the initial commit — every
