@@ -31,6 +31,13 @@ would ease cashflow strain.
 - **Branch workflow**: `main` only receives merges from `dev` after work is tested and
   confirmed. All day-to-day work happens on `dev` (or feature branches off `dev`, once
   real feature work starts). Never commit directly to `main`.
+- **Deployment**: live app is on Vercel (free tier), connected to GitHub. `main` is linked
+  as the production branch — merging `dev` → `main` and pushing will auto-deploy to
+  https://split-my-bills.vercel.app (confirm this auto-deploy behavior is actually enabled/
+  desired before relying on it; so far deploys have been triggered manually via `vercel --prod`).
+  Environment variables (`DATABASE_URL`, `AUTH_SECRET`) are set in the Vercel dashboard
+  separately from local `.env` — they don't sync automatically, must be updated in both
+  places if changed.
 - **How users get bill data in: manual entry + user-initiated statement upload only.**
   No live bank-account connection (Plaid or similar) in the free/core product — researched
   2026-07-17 and confirmed Plaid has no lasting free tier for production use (real costs,
@@ -155,6 +162,104 @@ The LLM only explains/prioritizes those numbers in plain English — it does not
   entered the red zone") rather than a new notification system. Not yet built — logged as
   visual-polish work to tackle once Phase 2's core split-suggestion logic is complete, so the
   two pieces of work don't get half-finished in parallel.
+- **Calendar visualization for pay dates + bill due dates** (added 2026-07-20, user idea):
+  after a user's first income source is entered, show a calendar (month and/or year view)
+  plotting small colored dots on paydays — extendable to also plot bill due dates in a
+  different color. User-customizable dot colors (future settings page). Same-day overlaps
+  should stack distinct dots rather than merge colors, so nothing gets hidden. **Technically
+  well-positioned to build**: `getUpcomingPayDates()` and `projectBillDueDates()` already
+  generate real calendar dates for exactly this purpose — currently capped at a 60-day
+  rolling window for the cashflow engine, would just need extending to a full-year window
+  for calendar display. Good pairing with Phase 2's existing risk detection — seeing pay
+  dates and bill dates on the same calendar makes shortfall periods visually obvious. Not
+  yet built — good candidate for a dedicated visual/UX phase.
+- **Collapsible "add income" form + calendar placement** (added 2026-07-20, user idea): once
+  at least one income source exists, collapse/shrink the add-income form (currently always
+  visible) and replace it with an "Add more income" button that expands the form back down
+  when clicked. The form itself should include a "Done for now" button (alongside the
+  existing "Add Income" button) to collapse it back up. The pay-date calendar (see above)
+  should live directly under the Income Sources list, in this same collapsed/expanded flow.
+  On mobile specifically, likely wants a modal/sheet pattern instead of inline expand, for
+  space reasons — to be finalized during actual mobile-responsive UI work (Phase 5). Same
+  progressive-disclosure pattern likely worth applying to the Bills form too, for consistency.
+  Not yet built — UX/polish backlog, to tackle once core functionality (Phase 3+) is further
+  along.
+
+- **2026-07-20 (cont'd, Phase 3 started)**: Started Phase 3 (AI coaching layer). Installed
+  Ollama locally, pulled `llama3.1:8b`, confirmed working via `ollama run`. Built the
+  `AIProvider` interface (`src/lib/ai/provider.ts` — one method, `generateCoaching()`, takes
+  our already-computed Phase 2 structured data and returns plain-English text, per the
+  original "rules engine computes, AI explains" design principle) and `OllamaProvider`
+  implementation (`src/lib/ai/ollama-provider.ts`) with a carefully constructed prompt: hands
+  the model our pre-computed numbers rather than asking it to do math, includes tone/length
+  constraints (concise, warm, ~150 words), and explicitly instructs it to say things look
+  fine when they do rather than manufacturing false urgency. Tested directly via a standalone
+  script (`npx tsx src/lib/ai/test.ts`) against sample data — **confirmed working, produced
+  genuinely usable coaching output.** Noted a real, expected tradeoff: running the 8B model
+  locally briefly used significant CPU/resources during generation — confirms the reasoning
+  behind planning Gemini (not self-hosted Ollama) for production, since a live multi-user app
+  can't have every request bog down a shared server. Local dev experience only; doesn't
+  affect end users once Gemini is wired up. Noted `llama3.2:3b` as a lighter/faster local
+  model option if the 8B model's resource use becomes annoying during regular dev work.
+
+  Hit a real scare: local login started failing with `ECONNREFUSED` from Prisma while the
+  Vercel deployment worked fine. Root cause found by user: `apps/web/.env` had accidentally
+  been overwritten with unrelated content (from copy-pasting the project status file at some
+  point), corrupting `DATABASE_URL`. Fixed by restoring the correct value. **Lesson: keep
+  `.env` edits isolated — don't paste other file contents into the same editor session
+  without double-checking which file is active.** Confirmed working again locally.
+
+- **2026-07-20 (cont'd)**: Confirmed the AI Coach dashboard card works end to end — real,
+  data-grounded output rendering correctly (two paragraphs, clearly reflecting actual input
+  data). Switched local dev default from `llama3.1:8b` to `llama3.2:3b` (smaller/faster
+  download and inference) per user preference: fast iteration now while testing wiring, since
+  the prompt/pipeline logic is model-independent and doesn't need final-quality output to
+  validate. **Real quality difference observed and worth remembering**: `llama3.1:8b` gave
+  direct, concrete, actionable coaching suggestions; `llama3.2:3b` gave the same volume of
+  information but leaned generic/encouraging rather than specific — same prompt, smaller
+  model followed the "give concrete actions" instruction less closely. **Standing decision:
+  `llama3.2:3b` stays the local dev default for now** (fast iteration), but the real quality
+  bar for this feature is the `8b`/Gemini level, not the `3b` level — worth switching back to
+  a larger model (or testing against Gemini) before judging final output quality, not just
+  wiring correctness.
+
+**Next session starts here:** AI coaching pipeline is fully built, wired, and confirmed
+working end to end locally via Ollama (currently `llama3.2:3b` for fast dev iteration).
+Remaining Phase 3 work: build the `GeminiProvider` (production AI, free tier) and the Usage
+Governor (Phase 3.5 — daily ceiling tracking, response caching, graceful fallback to
+rules-engine-only output). Session paused here (near usage limit).
+
+- **2026-07-20 (cont'd)**: Built `GeminiProvider` (`src/lib/ai/gemini-provider.ts`) — calls
+  the Gemini Flash-Lite free-tier API. Refactored the previously-duplicated prompt-building
+  logic out of both `ollama-provider.ts` and `gemini-provider.ts` into a single shared
+  `buildCoachingPrompt()` in `src/lib/ai/prompt.ts`, so the two providers can never drift out
+  of sync. Built `getAIProvider()` (`src/lib/ai/get-provider.ts`) — a simple selector that
+  returns `GeminiProvider` when `NODE_ENV === "production"` and `OllamaProvider` otherwise,
+  requiring zero manual configuration since Next.js/Vercel set `NODE_ENV` automatically.
+  Updated `/api/ai-coaching` to use the selector instead of hardcoding Ollama. **Confirmed
+  the graceful-degradation error handling works correctly in practice**: tested locally with
+  Ollama stopped — request failed cleanly, route caught it and returned `coaching: null`
+  instead of crashing; restarting Ollama fixed it immediately with no other changes needed.
+  Added `GEMINI_API_KEY` to `.env.example`. **Both providers built, selector wired, local
+  (Ollama) path fully confirmed working — Gemini (production) path not yet tested live.**
+
+- **2026-07-20 (cont'd)**: Deployed to production on Vercel. Merged `dev` into `main` for the
+  first time since session one (resolved an expected merge conflict on `PROJECT_STATE.md` by
+  taking `dev`'s version, since `main` had been untouched since the initial commit — every
+  other file merged cleanly as new additions). Installed Vercel CLI, linked the GitHub repo,
+  created a new project with root directory set to `apps/web` (required since this is a
+  monorepo). Added `DATABASE_URL` and `AUTH_SECRET` as environment variables in the Vercel
+  dashboard (Settings → Environment Variables — distinct from the separate "Environments"
+  page, an easy mix-up), then redeployed with `vercel --prod` so they took effect. **Live at
+  https://split-my-bills.vercel.app** — confirmed working on a real phone over a real
+  internet connection, no local network/WiFi dependency. This also resolved the earlier
+  mobile-login bug investigation (form submitting as GET instead of via fetch) — deploying
+  bypassed it entirely rather than requiring further local debugging.
+
+  Confirmed expected next issue: **mobile layout needs real responsive design work** — current
+  dashboard uses desktop-first fixed grids (`grid-cols-2`, `grid-cols-3`), not yet adapted for
+  small screens. This is exactly what Phase 5 (PWA Polish, mobile-responsive UI pass) is for —
+  not a bug, a known and already-planned gap.
 - **Email payment-confirmation scanning** (added 2026-07-19, user idea, researched): opt-in
   feature to search a user's email (via Gmail API OAuth, read-only scope) for payment
   confirmation emails ("thank you for your payment," receipts, etc.) to help auto-detect
@@ -261,13 +366,13 @@ finalized when Phase 1 UI work begins.
 
 ## 7. Current Status
 
-**Phase:** Phase 1 complete. **Phase 2 core logic complete AND tested end to end** — pay
-periods, 3-paycheck-month detection, shortfall calculation, and split suggestions all built,
-wired, and manually verified working against a real shortfall scenario. One known remaining
-gap: 3-paycheck-month "opportunity" suggestions (prepay/buffer) not yet built — current
-suggestions only react to shortfalls, not surplus months. That's the natural next piece, or
-Phase 3 (AI coaching layer) is also a reasonable next direction.
-**Last updated:** 2026-07-19 (late)
+**Phase:** Phase 1 complete. Phase 2 FULLY COMPLETE. **App is now LIVE at
+https://split-my-bills.vercel.app** — deployed to Vercel, connected to the real Neon database,
+confirmed working on a real phone over a real internet connection. Known gap: mobile layout
+is not yet responsive (desktop-first grids) — expected, this is Phase 5 scope, not a bug.
+**Next: Phase 3 — the AI coaching layer**, turning structured rules-engine output into
+plain-English suggestions (Ollama for dev, Gemini Flash-Lite for production).
+**Last updated:** 2026-07-20 (deployed)
 
 ---
 

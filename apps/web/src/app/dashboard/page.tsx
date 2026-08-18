@@ -43,6 +43,8 @@ export default function DashboardPage() {
   const [editingBillId, setEditingBillId] = useState<string | null>(null);
   const [expandedPeriod, setExpandedPeriod] = useState<number | null>(null);
   const [opportunities, setOpportunities] = useState<any[]>([]);
+  const [coaching, setCoaching] = useState<string | null>(null);
+  const [coachingLoading, setCoachingLoading] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -62,6 +64,20 @@ export default function DashboardPage() {
     setOpportunities(periodsData.opportunities ?? []);
     setLoading(false);
   }
+
+  useEffect(() => {
+  if (!loading) {
+    loadCoaching();
+  }
+}, [loading]);
+
+async function loadCoaching() {
+  setCoachingLoading(true);
+  const res = await fetch("/api/ai-coaching");
+  const data = await res.json();
+  setCoaching(data.coaching);
+  setCoachingLoading(false);
+}
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -194,6 +210,21 @@ export default function DashboardPage() {
   </CardHeader>
 </Card>
       </div>
+
+      <Card className="border-primary/40 bg-primary/5">
+  <CardHeader>
+    <CardTitle>Your AI Coach</CardTitle>
+  </CardHeader>
+  <CardContent>
+    {coachingLoading ? (
+      <p className="text-muted-foreground text-sm">Thinking...</p>
+    ) : coaching ? (
+      <p className="text-sm whitespace-pre-wrap">{coaching}</p>
+    ) : (
+      <p className="text-muted-foreground text-sm">No suggestions available right now.</p>
+    )}
+  </CardContent>
+</Card>
 
       {periods.length > 0 && (
         <Card>
