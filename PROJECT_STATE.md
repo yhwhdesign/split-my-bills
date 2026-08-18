@@ -243,6 +243,17 @@ rules-engine-only output). Session paused here (near usage limit).
   Added `GEMINI_API_KEY` to `.env.example`. **Both providers built, selector wired, local
   (Ollama) path fully confirmed working — Gemini (production) path not yet tested live.**
 
+- **2026-07-20 (cont'd)**: Deployed Phase 3 AI work to production. Merged `dev` → `main`,
+  pushed. Ran into a Vercel CLI "not authorized" error — resolved with `vercel login` to
+  re-authenticate (session had simply expired, not a real problem). **Confirmed the Gemini
+  production path works live on https://split-my-bills.vercel.app** — the deployed app
+  correctly used `GeminiProvider` (via `NODE_ENV === "production"`) and the AI Coach card
+  rendered real output. **Phase 3's core provider system is now fully complete and verified
+  on both paths**: Ollama locally, Gemini in production, automatic selection, no manual
+  switching required. Remaining Phase 3 work: the Usage Governor (Phase 3.5) — daily ceiling
+  tracking, response caching, graceful fallback to rules-engine-only output when near/at the
+  free-tier limit.
+
 - **2026-07-20 (cont'd)**: Deployed to production on Vercel. Merged `dev` into `main` for the
   first time since session one (resolved an expected merge conflict on `PROJECT_STATE.md` by
   taking `dev`'s version, since `main` had been untouched since the initial commit — every
@@ -366,13 +377,16 @@ finalized when Phase 1 UI work begins.
 
 ## 7. Current Status
 
-**Phase:** Phase 1 complete. Phase 2 FULLY COMPLETE. **App is now LIVE at
-https://split-my-bills.vercel.app** — deployed to Vercel, connected to the real Neon database,
-confirmed working on a real phone over a real internet connection. Known gap: mobile layout
-is not yet responsive (desktop-first grids) — expected, this is Phase 5 scope, not a bug.
-**Next: Phase 3 — the AI coaching layer**, turning structured rules-engine output into
-plain-English suggestions (Ollama for dev, Gemini Flash-Lite for production).
-**Last updated:** 2026-07-20 (deployed)
+**Phase:** Phase 1 complete. Phase 2 FULLY COMPLETE. **App is LIVE at
+https://split-my-bills.vercel.app.** **Phase 3 core provider system COMPLETE and verified on
+both paths** — Ollama (local dev) and Gemini (production) both confirmed working end to end,
+automatic environment-based selection, graceful degradation when AI is unavailable confirmed
+working correctly (rest of app stays fully functional). Known gap: mobile layout is not yet
+responsive (Phase 5 scope, not a bug).
+**Next: Phase 3.5 — the Usage Governor** (daily ceiling tracking against Gemini's free-tier
+quota, response caching, graceful fallback), to guarantee zero billing surprises before real
+users start generating AI requests in production.
+**Last updated:** 2026-07-20 (Gemini verified live)
 
 ---
 
