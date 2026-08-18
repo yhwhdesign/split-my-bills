@@ -1,4 +1,4 @@
-import { calculatePayPeriods, generateSplitSuggestions, type Bill, type PaySchedule } from "@split-my-bills/shared";
+import { calculatePayPeriods, generateSplitSuggestions, generateOpportunitySuggestions, type Bill, type PaySchedule } from "@split-my-bills/shared";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/session";
@@ -35,8 +35,7 @@ export async function GET() {
 );
 
 const suggestions = generateSplitSuggestions(periods);
+const opportunities = generateOpportunitySuggestions(periods);
 
-return NextResponse.json({ periods, suggestions });
-
-  return NextResponse.json({ periods });
+return NextResponse.json({ periods, suggestions, opportunities });
 }

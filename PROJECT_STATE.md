@@ -110,14 +110,12 @@ The LLM only explains/prioritizes those numbers in plain English — it does not
   opportunity (build buffer, prepay a splittable bill, or prepare for the following leaner
   2-paycheck month) rather than letting it blend into normal spending unnoticed. This is a
   strong showcase for both the split-suggestion feature and the AI coaching layer.
-  **Status: detection is built (`isThreePaycheckMonth` on every period); the "opportunity"
-  framing/suggestions for 3-paycheck months specifically is not yet built into
-  `generateSplitSuggestions()` — currently it only reacts to shortfalls, not surplus months.**
-  **2026-07-19: manually tested end to end with a real shortfall scenario** (added a bill
-  large enough to push a period into deficit, marked it splittable) — Pay Periods correctly
-  flipped to "Short $X.XX," and the Split Suggestions card correctly appeared showing the
-  bill with accurate reasoning. **Core Phase 2 split-suggestion logic confirmed fully working
-  end to end**, not just theoretically wired.
+  **Status: FULLY COMPLETE (2026-07-20)** — detection, shortfall suggestions, AND
+  3-paycheck-month opportunity suggestions (`generateOpportunitySuggestions()`) all built,
+  wired, and compiling with no errors. **2026-07-19: manually tested end to end with a real
+  shortfall scenario** (added a bill large enough to push a period into deficit, marked it
+  splittable) — Pay Periods correctly flipped to "Short $X.XX," and the Split Suggestions
+  card correctly appeared showing the bill with accurate reasoning.
 - [ ] **Phase 3 — AI Coaching Layer**: `AIProvider` interface (Ollama default, Gemini fallback), plain-English suggestions endpoint
 - [ ] **Phase 3.5 — Usage Governor**: `AIUsageLog` table, daily ceiling check before every AI call, response caching keyed on bill/income snapshot, graceful fallback to rules-engine-only output, admin usage-visibility endpoint
 - [ ] **Phase 4 — Statement Import & Trend Analysis**: user-initiated CSV/PDF bank statement
@@ -207,6 +205,16 @@ The LLM only explains/prioritizes those numbers in plain English — it does not
   month detection, cashflow risk/shortfall calculation, and split suggestions all built and
   wired end to end. Remaining Phase 2 work is mostly testing edge cases (e.g., confirming a
   real shortfall scenario end to end) rather than new logic.
+
+- **2026-07-20**: Closed the last known Phase 2 gap — built `generateOpportunitySuggestions()`
+  in `packages/shared`, which detects 3-paycheck months that are NOT already a shortfall and
+  have genuine surplus, then suggests building a buffer or prepaying a splittable bill ahead
+  of the next (leaner, regular 2-paycheck) period. Wired into `/api/split-suggestions`
+  (now returns `periods`, `suggestions`, and `opportunities`) and a new "Extra Paycheck
+  Opportunities" dashboard card, styled consistently with the existing Split Suggestions
+  card. Compiled with no errors. **Phase 2 is now fully complete** — every piece of scope
+  defined for it (pay periods, 3-paycheck-month detection and opportunity suggestions,
+  shortfall detection and split suggestions) is built and wired end to end.
 - **Overdue bill reconciliation prompt** (added 2026-07-19, user idea, low priority): once a
   bill's due date passes without it being marked paid, prompt the user ("Was this paid?")
   rather than letting it silently go unconfirmed. If yes, let them pick the actual paid date

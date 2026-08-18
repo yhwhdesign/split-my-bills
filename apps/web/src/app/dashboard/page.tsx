@@ -42,6 +42,7 @@ export default function DashboardPage() {
   const [editingIncomeId, setEditingIncomeId] = useState<string | null>(null);
   const [editingBillId, setEditingBillId] = useState<string | null>(null);
   const [expandedPeriod, setExpandedPeriod] = useState<number | null>(null);
+  const [opportunities, setOpportunities] = useState<any[]>([]);
 
   useEffect(() => {
     loadData();
@@ -58,6 +59,7 @@ export default function DashboardPage() {
    const periodsData = await periodsRes.json();
     setPeriods(periodsData.periods ?? []);
     setSuggestions(periodsData.suggestions ?? []);
+    setOpportunities(periodsData.opportunities ?? []);
     setLoading(false);
   }
 
@@ -405,6 +407,23 @@ export default function DashboardPage() {
             </form>
           </CardContent>
         </Card>
+
+        {opportunities.length > 0 && (
+  <Card className="border-primary/30 bg-primary/5">
+    <CardHeader>
+      <CardTitle>Extra Paycheck Opportunities</CardTitle>
+      <CardDescription>Months with a 3rd paycheck — good chances to get ahead</CardDescription>
+    </CardHeader>
+    <CardContent className="space-y-3">
+      {opportunities.map((o, idx) => (
+        <div key={idx} className="rounded-md border border-primary/20 bg-background p-3 text-sm">
+          <div className="font-medium">{new Date(o.payDate).toLocaleDateString()}</div>
+          <p className="text-muted-foreground text-xs mt-1">{o.reasoning}</p>
+        </div>
+      ))}
+    </CardContent>
+  </Card>
+)}
       </div>
     </main>
   );

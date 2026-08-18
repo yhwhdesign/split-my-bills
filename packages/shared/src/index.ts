@@ -243,3 +243,42 @@ export function generateSplitSuggestions(periods: PayPeriod[]): SplitSuggestion[
 
   return suggestions;
 }
+
+export interface OpportunitySuggestion {
+  periodStart: Date;
+  payDate: Date;
+  extraAmount: number;
+  reasoning: string;
+}
+
+export function generateOpportunitySuggestions(periods: PayPeriod[]): OpportunitySuggestion[] {
+  const suggestions: OpportunitySuggestion[] = [];
+
+  for (let i = 0; i < periods.length; i++) {
+    const period = periods[i];
+    if (!period.isThreePaycheckMonth || period.isCashflowRisk) continue;
+
+    // This paycheck's "extra" amount is whatever's left after this period's own bills
+    const surplus = period.income - period.totalBillAmount;
+    if (surplus <= 0) continue;
+
+    // Look ahead: is there a leaner period coming up (income covers bills, but with little room)?
+    const nextPeriod = periods[i + 1];
+    let reasoning = `This is a 3-paycheck month — you have an extra $${period.income.toFixed(2)} paycheck this period beyond your usual bills, leaving about $${surplus.toFixed(2)} free.`;
+
+    if (nextPeriod && !nextPeriod.isThreePaycheckMonth) {
+      reasoning += ` Consider setting some aside as a buffer, or prepaying a splittable bill ahead of schedule, so the next regular pay period (starting ${nextPeriod.payDate.toDateString()}) feels lighter.`;
+    } else {
+      reasoning += ` Consider setting some aside as a buffer for a future tighter month.`;
+    }
+
+    suggestions.push({
+      periodStart: period.start,
+      payDate: period.payDate,
+      extraAmount: surplus,
+      reasoning,
+    });
+  }
+
+  return suggestions;
+}
