@@ -209,12 +209,39 @@ The LLM only explains/prioritizes those numbers in plain English — it does not
   `.env` edits isolated — don't paste other file contents into the same editor session
   without double-checking which file is active.** Confirmed working again locally.
 
-  **Next session starts here:** AI coaching card is built and wired (`/api/ai-coaching`,
-  dashboard card, `OllamaProvider`) but full end-to-end UI test was interrupted by the `.env`
-  issue — re-confirm the dashboard's "Your AI Coach" card renders real coaching text. Also
-  planned: try `llama3.2:3b` (or similar lighter model) for faster local responses during
-  testing, per user's note. After that, Gemini production provider + Usage Governor
-  (Phase 3.5) are the remaining pieces of Phase 3. Session paused here (near usage limit).
+- **2026-07-20 (cont'd)**: Confirmed the AI Coach dashboard card works end to end — real,
+  data-grounded output rendering correctly (two paragraphs, clearly reflecting actual input
+  data). Switched local dev default from `llama3.1:8b` to `llama3.2:3b` (smaller/faster
+  download and inference) per user preference: fast iteration now while testing wiring, since
+  the prompt/pipeline logic is model-independent and doesn't need final-quality output to
+  validate. **Real quality difference observed and worth remembering**: `llama3.1:8b` gave
+  direct, concrete, actionable coaching suggestions; `llama3.2:3b` gave the same volume of
+  information but leaned generic/encouraging rather than specific — same prompt, smaller
+  model followed the "give concrete actions" instruction less closely. **Standing decision:
+  `llama3.2:3b` stays the local dev default for now** (fast iteration), but the real quality
+  bar for this feature is the `8b`/Gemini level, not the `3b` level — worth switching back to
+  a larger model (or testing against Gemini) before judging final output quality, not just
+  wiring correctness.
+
+**Next session starts here:** AI coaching pipeline is fully built, wired, and confirmed
+working end to end locally via Ollama (currently `llama3.2:3b` for fast dev iteration).
+Remaining Phase 3 work: build the `GeminiProvider` (production AI, free tier) and the Usage
+Governor (Phase 3.5 — daily ceiling tracking, response caching, graceful fallback to
+rules-engine-only output). Session paused here (near usage limit).
+
+- **2026-07-20 (cont'd)**: Built `GeminiProvider` (`src/lib/ai/gemini-provider.ts`) — calls
+  the Gemini Flash-Lite free-tier API. Refactored the previously-duplicated prompt-building
+  logic out of both `ollama-provider.ts` and `gemini-provider.ts` into a single shared
+  `buildCoachingPrompt()` in `src/lib/ai/prompt.ts`, so the two providers can never drift out
+  of sync. Built `getAIProvider()` (`src/lib/ai/get-provider.ts`) — a simple selector that
+  returns `GeminiProvider` when `NODE_ENV === "production"` and `OllamaProvider` otherwise,
+  requiring zero manual configuration since Next.js/Vercel set `NODE_ENV` automatically.
+  Updated `/api/ai-coaching` to use the selector instead of hardcoding Ollama. **Confirmed
+  the graceful-degradation error handling works correctly in practice**: tested locally with
+  Ollama stopped — request failed cleanly, route caught it and returned `coaching: null`
+  instead of crashing; restarting Ollama fixed it immediately with no other changes needed.
+  Added `GEMINI_API_KEY` to `.env.example`. **Both providers built, selector wired, local
+  (Ollama) path fully confirmed working — Gemini (production) path not yet tested live.**
 
 - **2026-07-20 (cont'd)**: Deployed to production on Vercel. Merged `dev` into `main` for the
   first time since session one (resolved an expected merge conflict on `PROJECT_STATE.md` by

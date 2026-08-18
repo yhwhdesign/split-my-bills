@@ -8,7 +8,7 @@ import {
   type Bill,
   type PaySchedule,
 } from "@split-my-bills/shared";
-import { OllamaProvider } from "@/lib/ai/ollama-provider";
+import { getAIProvider } from "@/lib/ai/get-provider";
 
 export async function GET() {
   const userId = await getCurrentUserId();
@@ -40,7 +40,7 @@ export async function GET() {
   const splitSuggestions = generateSplitSuggestions(periods);
   const opportunitySuggestions = generateOpportunitySuggestions(periods);
 
-  const provider = new OllamaProvider();
+  const provider = getAIProvider();
 
   try {
     const coaching = await provider.generateCoaching({
