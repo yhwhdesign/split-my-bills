@@ -243,6 +243,39 @@ rules-engine-only output). Session paused here (near usage limit).
   Added `GEMINI_API_KEY` to `.env.example`. **Both providers built, selector wired, local
   (Ollama) path fully confirmed working — Gemini (production) path not yet tested live.**
 
+- **2026-07-20 (cont'd)**: Deployed Phase 3 AI work to production. Merged `dev` → `main`,
+  pushed. Ran into a Vercel CLI "not authorized" error — resolved with `vercel login` to
+  re-authenticate (session had simply expired, not a real problem). **Confirmed the Gemini
+  production path works live on https://split-my-bills.vercel.app** — the deployed app
+  correctly used `GeminiProvider` (via `NODE_ENV === "production"`) and the AI Coach card
+  rendered real output. **Phase 3's core provider system is now fully complete and verified
+  on both paths**: Ollama locally, Gemini in production, automatic selection, no manual
+  switching required. Remaining Phase 3 work: the Usage Governor (Phase 3.5) — daily ceiling
+  tracking, response caching, graceful fallback to rules-engine-only output when near/at the
+  free-tier limit.
+
+- **2026-07-20 (cont'd, Phase 3.5)**: Built the Usage Governor. Added `AIUsageLog` (one row
+  per calendar day, tracks call count) and `AICoachingCache` (one cached response per user,
+  keyed by a hash of their current bills/income/suggestions data) to the Prisma schema, ran
+  both migrations. Built `src/lib/ai/usage-governor.ts`: `canMakeAICall()` checks today's
+  count against a ceiling of 1,350 (deliberately below Gemini's real 1,500/day free-tier cap,
+  so a burst of traffic can't cross the real limit before our counter catches up) — but only
+  actively limits in production, since local Ollama dev calls are free/unlimited and shouldn't
+  be throttled; `recordAICall()` increments today's count; `hashCoachingInput()` (SHA-256)
+  supports the caching layer. Wired into `/api/ai-coaching`: checks cache first (if the
+  user's underlying data hasn't changed since their last AI call, serves the cached response
+  instantly with zero quota used); if no valid cache, checks the governor before calling the
+  AI provider; on success, records the call and updates the cache. Added a graceful, honest
+  UI message on the dashboard's AI Coach card for when the daily limit is reached — reassures
+  the user that their bills/split suggestions above remain fully accurate, only the AI
+  narration pauses until the next day. Compiled with no errors.
+
+  **Phase 3 is now fully complete**: dual-provider system (Ollama dev / Gemini production)
+  verified working on both paths, plus the Usage Governor guaranteeing the original
+  net-zero/no-billing-surprises promise now that AI calls are live in production. This closes
+  out the original three-part AI vision from session one: rules engine computes, AI explains,
+  governor guarantees it never costs anything.
+
 - **2026-07-20 (cont'd)**: Deployed to production on Vercel. Merged `dev` into `main` for the
   first time since session one (resolved an expected merge conflict on `PROJECT_STATE.md` by
   taking `dev`'s version, since `main` had been untouched since the initial commit — every
@@ -366,13 +399,17 @@ finalized when Phase 1 UI work begins.
 
 ## 7. Current Status
 
-**Phase:** Phase 1 complete. Phase 2 FULLY COMPLETE. **App is now LIVE at
-https://split-my-bills.vercel.app** — deployed to Vercel, connected to the real Neon database,
-confirmed working on a real phone over a real internet connection. Known gap: mobile layout
-is not yet responsive (desktop-first grids) — expected, this is Phase 5 scope, not a bug.
-**Next: Phase 3 — the AI coaching layer**, turning structured rules-engine output into
-plain-English suggestions (Ollama for dev, Gemini Flash-Lite for production).
-**Last updated:** 2026-07-20 (deployed)
+**Phase:** Phase 1 complete. Phase 2 FULLY COMPLETE. **Phase 3 FULLY COMPLETE** — dual AI
+provider system (Ollama dev / Gemini production) verified working on both paths, plus the
+Usage Governor (daily ceiling tracking, response caching, graceful degradation messaging)
+guaranteeing zero billing surprises now that AI calls are live in production. **App is LIVE
+at https://split-my-bills.vercel.app.** Known gap: mobile layout is not yet responsive
+(Phase 5 scope, not a bug); Usage Governor built but not yet deployed/tested live in
+production (built and compiling locally, migration run locally — needs deploy + real-world
+verification next).
+**Next: deploy Phase 3.5 work to production and verify, then Phase 4 (statement import) or
+Phase 5 (PWA/mobile polish) — core functionality is essentially complete at this point.**
+**Last updated:** 2026-07-20 (Usage Governor built)
 
 ---
 

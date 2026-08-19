@@ -45,6 +45,8 @@ export default function DashboardPage() {
   const [opportunities, setOpportunities] = useState<any[]>([]);
   const [coaching, setCoaching] = useState<string | null>(null);
   const [coachingLoading, setCoachingLoading] = useState(false);
+  const [limitReached, setLimitReached] = useState(false);
+
 
   useEffect(() => {
     loadData();
@@ -76,6 +78,7 @@ async function loadCoaching() {
   const res = await fetch("/api/ai-coaching");
   const data = await res.json();
   setCoaching(data.coaching);
+  setLimitReached(!!data.limitReached);
   setCoachingLoading(false);
 }
 
@@ -216,14 +219,19 @@ async function loadCoaching() {
     <CardTitle>Your AI Coach</CardTitle>
   </CardHeader>
   <CardContent>
-    {coachingLoading ? (
-      <p className="text-muted-foreground text-sm">Thinking...</p>
-    ) : coaching ? (
-      <p className="text-sm whitespace-pre-wrap">{coaching}</p>
-    ) : (
-      <p className="text-muted-foreground text-sm">No suggestions available right now.</p>
-    )}
-  </CardContent>
+  {coachingLoading ? (
+    <p className="text-muted-foreground text-sm">Thinking...</p>
+  ) : limitReached ? (
+    <p className="text-muted-foreground text-sm">
+      AI suggestions have reached today's limit — your bills and split suggestions above are
+      still fully accurate. Check back tomorrow for AI coaching.
+    </p>
+  ) : coaching ? (
+    <p className="text-sm whitespace-pre-wrap">{coaching}</p>
+  ) : (
+    <p className="text-muted-foreground text-sm">No suggestions available right now.</p>
+  )}
+</CardContent>
 </Card>
 
       {periods.length > 0 && (

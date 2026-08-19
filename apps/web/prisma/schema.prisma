@@ -97,3 +97,23 @@ model SplitSuggestion {
 
   createdAt       DateTime  @default(now())
 }
+
+model AIUsageLog {
+  id        String   @id @default(cuid())
+  date      String   // "2026-07-20" format, one row per day
+  count     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([date])
+}
+
+model AICoachingCache {
+  id        String   @id @default(cuid())
+  userId    String
+  dataHash  String
+  coaching  String
+  createdAt DateTime @default(now())
+
+  @@unique([userId])
+}
