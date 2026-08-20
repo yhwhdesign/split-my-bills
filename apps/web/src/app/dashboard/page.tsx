@@ -250,7 +250,7 @@ async function loadCoaching() {
               >
                 <button
                   onClick={() => setExpandedPeriod(expandedPeriod === idx ? null : idx)}
-                  className="flex w-full items-center justify-between p-3 text-left"
+                  className="flex w-full items-center justify-between gap-2 p-3 text-left flex-wrap"
                 >
                   <div>
                     <div className="font-medium">
@@ -325,7 +325,7 @@ async function loadCoaching() {
           </CardHeader>
           <CardContent className="space-y-4">
             {income.map((i) => (
-              <div key={i.id} className="flex items-center justify-between text-sm border-b pb-2">
+              <div key={i.id} className="flex items-center justify-between gap-2 text-sm border-b pb-2 flex-wrap">
                 <span>{i.name}</span>
                 <div className="flex items-center gap-2">
                   {editingIncomeId === i.id ? (
@@ -384,7 +384,7 @@ async function loadCoaching() {
           </CardHeader>
           <CardContent className="space-y-4">
             {bills.map((b) => (
-              <div key={b.id} className="flex items-center justify-between text-sm border-b pb-2">
+              <div key={b.id} className="flex items-center justify-between gap-2 text-sm border-b pb-2 flex-wrap">
                 <div className="flex items-center gap-2">
                   <button onClick={() => handleTogglePaid(b.id, b.paidThisMonth)}>
                     {b.paidThisMonth ? (
