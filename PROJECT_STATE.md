@@ -284,6 +284,19 @@ rules-engine-only output). Session paused here (near usage limit).
   verified working in production. **Phase 3 (AI coaching layer) is fully complete, deployed,
   and confirmed working end to end.** Session paused here.
 
+- **2026-07-20 (cont'd)**: Made quick mobile-responsive fixes to the dashboard — summary
+  cards grid (`grid-cols-1 sm:grid-cols-3`), Income/Bills two-column grid
+  (`grid-cols-1 md:grid-cols-2`), tighter outer padding on mobile (`p-4 sm:p-8`), and
+  `flex-wrap` on bill/income list rows and pay-period header rows so content wraps instead of
+  overflowing on narrow screens. **These are functional fixes only** — nothing overlapping or
+  broken anymore — **not a real visual redesign**. User confirmed it's usable now but still
+  not close to the BillOut/1Bill-inspired look from the design direction notes. **Flagged as
+  needing its own dedicated design session**: pull up the BillOut/1Bill references again
+  side-by-side with the actual app and rebuild the dashboard's visual structure intentionally
+  (real card styling, spacing rhythm, information grouping) rather than continuing to patch
+  individual Tailwind classes piecemeal. This is real, not-yet-done work — distinct from the
+  "mobile-responsive" checkbox, which is now reasonably satisfied functionally.
+
 - **2026-07-20 (cont'd)**: Deployed to production on Vercel. Merged `dev` into `main` for the
   first time since session one (resolved an expected merge conflict on `PROJECT_STATE.md` by
   taking `dev`'s version, since `main` had been untouched since the initial commit — every
