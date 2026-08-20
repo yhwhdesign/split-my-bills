@@ -327,6 +327,52 @@ rules-engine-only output). Session paused here (near usage limit).
   direction — not yet a full match, but no longer just "functional and unstyled." Good
   natural stopping point for the session.
 
+- **2026-07-21 (cont'd)**: Extended design session, incorporating Rocket Money as a third
+  visual reference alongside BillOut/1Bill. Researched Rocket Money's actual visual language
+  (dark high-contrast hero sections, bold data visualization, confident large numbers) rather
+  than just features. Discussed design philosophy at length: visual interest should come from
+  clarity/confidence/purposeful motion, not decoration for its own sake — restraint with one
+  accent color, real data visualization once available, whitespace as a deliberate feature.
+  Gave an honest comparative assessment against all three references: design language is
+  genuinely in the same family (not clashing/amateurish), feature set is arguably ahead in
+  one meaningful way (pay-schedule-aware split suggestions + 3-paycheck-month detection, which
+  none of the three references do), and the honest gap is iteration density — no real charts
+  yet (blocked on Phase 4 data), no motion/animation, no loading/empty-state polish, less
+  component-level refinement — all addressable, not signs of a flawed foundation.
+
+  Consolidated all scattered Phase 6-adjacent backlog design ideas into a real, scoped
+  **Phase 6 — Visual Design System & Polish**, deliberately placed as the last core phase
+  (most effective once all features exist to be polished).
+
+  Built and shipped several concrete improvements: (1) softened `--background` from pure
+  white to a subtle warm off-white (`oklch(0.975 0.003 90)`) per user's correct read that
+  pure white felt harsh/sterile — kept `--card` at true white so cards still visually "lift"
+  off the page; (2) replaced the three separate light summary cards + progress bar with a
+  single unified dark hero card (`bg-zinc-900`, white/zinc-400 text, divided stat columns)
+  — directly inspired by Rocket Money's contrast technique, now the clear visual anchor of
+  the dashboard; (3) built a reusable `Logo` component (`src/components/logo.tsx` — PiggyBank
+  icon + "SplitMyBills" wordmark with the primary-colored second half) and used it
+  consistently on login, signup, and the dashboard header; (4) fixed a real, meaningful bug:
+  visiting the bare root URL showed the leftover session-one test page instead of routing
+  anywhere real — fixed with a proper server-side redirect in `page.tsx` (logged-in → 
+  `/dashboard`, logged-out → `/login`); (5) added `/api/user/me` and wired the user's real
+  name into the dashboard header ("Welcome back, [Name]").
+
+  Hit the exact same category of bug as the earlier `utils.ts` incident: the user-name
+  display looked completely correct on every level (API returning correct data confirmed via
+  direct browser visit, `loadData()` correct, state declaration correct, JSX correct) yet
+  didn't render — resolved by clearing `.next` and hard-refreshing, not a real code bug.
+  **This is now a confirmed, repeatable pattern worth remembering as a standing habit: if
+  code checks out correct on every level but behavior doesn't match, clear
+  `apps/web/.next` and hard-refresh before assuming there's a logic bug to find.**
+
+  Logged a new backlog idea: an account menu/settings page (log out, pay schedule editing,
+  dark mode toggle, calendar dot-color customization, eventually account management) — now
+  that the user's name is displayed, a natural next step once enough settings-worthy features
+  exist to justify a dedicated page.
+
+  **All of the above tested and confirmed working locally**, not yet committed/deployed.
+
 - **2026-07-21 (cont'd)**: Committed and deployed today's design pass — merged `dev` → `main`,
   pushed, confirmed working live on both desktop and mobile. User caught a real bug: long
   bill/income names caused the entire amount+icons block to wrap below the name (a side
@@ -375,6 +421,13 @@ rules-engine-only output). Session paused here (near usage limit).
   dashboard uses desktop-first fixed grids (`grid-cols-2`, `grid-cols-3`), not yet adapted for
   small screens. This is exactly what Phase 5 (PWA Polish, mobile-responsive UI pass) is for —
   not a bug, a known and already-planned gap.
+- **Account menu / settings page** (added 2026-07-21, user idea): now that the user's name
+  is displayed on the dashboard, a natural next step is a real account menu (dropdown from
+  the header, likely near the logo/name) housing things like: log out (currently a standalone
+  button), a settings page (pay schedule editing, the "customizable dot colors" idea from the
+  calendar backlog item, dark mode toggle), and eventually account management (email/password
+  change, delete account). Not yet built — good candidate for Phase 6 or its own small phase
+  once enough settings-worthy features exist to justify a dedicated page.
 - **Email payment-confirmation scanning** (added 2026-07-19, user idea, researched): opt-in
   feature to search a user's email (via Gmail API OAuth, read-only scope) for payment
   confirmation emails ("thank you for your payment," receipts, etc.) to help auto-detect
@@ -482,14 +535,16 @@ finalized when Phase 1 UI work begins.
 ## 7. Current Status
 
 **Phase:** Phase 1 complete. Phase 2 FULLY COMPLETE. Phase 3 FULLY COMPLETE, DEPLOYED, AND
-VERIFIED LIVE. Mobile-responsive functional fixes done. **Design pass ongoing** — header,
-category icons, status badges, and a progress bar added; **and a major bug just fixed**:
-light mode's `--primary` CSS variable had been stuck at shadcn's default gray since the
-color was originally "set" (only `.dark` was ever actually updated) — the whole app has been
-rendering without its intended indigo accent color until just now. Confirmed fixed, real
-color now visible throughout. Not yet committed/deployed as of this fix.
-**Next: commit and deploy this batch, then continue design refinement OR move to Phase 4.**
-**Last updated:** 2026-07-21 (color bug fixed)
+VERIFIED LIVE. Mobile-responsive functional fixes done. **Phase 6 (Visual Design System &
+Polish) now exists as a real scoped phase** in the roadmap, consolidating previously
+scattered design backlog items. Significant progress made toward it today: light-mode color
+bug fixed (major), off-white background softened, dark hero summary card built (Rocket
+Money-inspired contrast technique), reusable `Logo` component built and used consistently
+across login/signup/dashboard, root URL redirect fixed (was showing a dead test page),
+user's real name now displayed on the dashboard. **All confirmed working locally, not yet
+committed/deployed.**
+**Next: commit and deploy this batch, then continue Phase 6 refinement OR move to Phase 4.**
+**Last updated:** 2026-07-21 (branding + hero card + fixes, pending deploy)
 
 ---
 

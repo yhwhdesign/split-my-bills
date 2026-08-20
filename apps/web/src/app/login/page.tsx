@@ -12,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Logo } from "@/components/logo";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -50,6 +51,9 @@ export default function LoginPage() {
     <main className="flex min-h-screen items-center justify-center bg-background p-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
+          <div className="flex justify-center mb-2">
+            <Logo size="large" />
+          </div>
           <CardTitle className="text-2xl">Welcome back</CardTitle>
           <CardDescription>Log in to Split My Bills</CardDescription>
         </CardHeader>
