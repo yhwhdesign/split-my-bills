@@ -186,56 +186,56 @@ async function loadCoaching() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Total Income</CardDescription>
-            <CardTitle className="text-2xl">${totalIncome.toFixed(2)}</CardTitle>
+        <Card className="shadow-sm border-border/50 py-6">
+          <CardHeader className="pb-1">
+            <CardDescription className="text-xs uppercase tracking-wide">Total Income</CardDescription>
+            <CardTitle className="text-3xl font-bold">${totalIncome.toFixed(2)}</CardTitle>
           </CardHeader>
         </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Total Bills</CardDescription>
-            <CardTitle className="text-2xl">${totalBills.toFixed(2)}</CardTitle>
+        <Card className="shadow-sm border-border/50 py-6">
+          <CardHeader className="pb-1">
+            <CardDescription className="text-xs uppercase tracking-wide">Total Bills</CardDescription>
+            <CardTitle className="text-3xl font-bold">${totalBills.toFixed(2)}</CardTitle>
           </CardHeader>
         </Card>
-        <Card>
-  <CardHeader className="pb-2">
-    <CardDescription>
-      {currentPeriod
-        ? `Remaining (through ${new Date(currentPeriod.end).toLocaleDateString()})`
-        : "Remaining"}
-    </CardDescription>
-    <CardTitle
-      className={`text-2xl ${periodRemaining < 0 ? "text-destructive" : "text-primary"}`}
-    >
-      ${periodRemaining.toFixed(2)}
-    </CardTitle>
-  </CardHeader>
-</Card>
+        <Card className="shadow-sm border-border/50 py-6">
+          <CardHeader className="pb-1">
+            <CardDescription className="text-xs uppercase tracking-wide">
+              {currentPeriod
+                ? `Remaining (through ${new Date(currentPeriod.end).toLocaleDateString()})`
+                : "Remaining"}
+            </CardDescription>
+            <CardTitle
+              className={`text-3xl font-bold ${periodRemaining < 0 ? "text-destructive" : "text-primary"}`}
+            >
+              ${periodRemaining.toFixed(2)}
+            </CardTitle>
+          </CardHeader>
+        </Card>
       </div>
 
-      <Card className="border-primary/40 bg-primary/5">
-  <CardHeader>
-    <CardTitle>Your AI Coach</CardTitle>
-  </CardHeader>
-  <CardContent>
-  {coachingLoading ? (
-    <p className="text-muted-foreground text-sm">Thinking...</p>
-  ) : limitReached ? (
-    <p className="text-muted-foreground text-sm">
-      AI suggestions have reached today's limit — your bills and split suggestions above are
-      still fully accurate. Check back tomorrow for AI coaching.
-    </p>
-  ) : coaching ? (
-    <p className="text-sm whitespace-pre-wrap">{coaching}</p>
-  ) : (
-    <p className="text-muted-foreground text-sm">No suggestions available right now.</p>
-  )}
-</CardContent>
-</Card>
+      <Card className="border-primary/30 bg-primary/5 shadow-sm py-6">
+        <CardHeader>
+          <CardTitle>Your AI Coach</CardTitle>
+        </CardHeader>
+        <CardContent>
+        {coachingLoading ? (
+          <p className="text-muted-foreground text-sm">Thinking...</p>
+        ) : limitReached ? (
+          <p className="text-muted-foreground text-sm">
+            AI suggestions have reached today's limit — your bills and split suggestions above are
+            still fully accurate. Check back tomorrow for AI coaching.
+          </p>
+        ) : coaching ? (
+          <p className="text-sm whitespace-pre-wrap">{coaching}</p>
+        ) : (
+          <p className="text-muted-foreground text-sm">No suggestions available right now.</p>
+        )}
+      </CardContent>
+      </Card>
 
       {periods.length > 0 && (
-        <Card>
+        <Card className="shadow-sm border-border/50 py-6">
           <CardHeader>
             <CardTitle>Upcoming Pay Periods</CardTitle>
             <CardDescription>Based on your pay schedule and bills</CardDescription>
@@ -280,8 +280,8 @@ async function loadCoaching() {
                         key={i}
                         className="flex justify-between text-xs text-muted-foreground"
                       >
-                        <span>{item.bill.name}</span>
-                        <span>${item.bill.amount.toFixed(2)}</span>
+                        <span className="font-medium">{item.bill.name}</span>
+                        <span className="font-semibold">${item.bill.amount.toFixed(2)}</span>
                       </div>
                     ))}
                   </div>
@@ -293,40 +293,40 @@ async function loadCoaching() {
       )}
 
       {suggestions.length > 0 && (
-  <Card className="border-primary/30 bg-primary/5">
-    <CardHeader>
-      <CardTitle>Split Suggestions</CardTitle>
-      <CardDescription>Ways to smooth out tight pay periods</CardDescription>
-    </CardHeader>
-    <CardContent className="space-y-3">
-      {suggestions.map((s, idx) => (
-        <div key={idx} className="rounded-md border border-primary/20 bg-background p-3 text-sm">
-          <div className="flex items-center justify-between">
-            <span className="font-medium">{s.billName}</span>
-            <span
-              className={`text-xs font-medium ${
-                s.wouldResolve ? "text-primary" : "text-muted-foreground"
-              }`}
-            >
-              {s.wouldResolve ? "Resolves shortfall" : "Partial help"}
-            </span>
-          </div>
-          <p className="text-muted-foreground text-xs mt-1">{s.reasoning}</p>
-        </div>
-      ))}
-    </CardContent>
-  </Card>
-)}
+        <Card className="border-primary/30 bg-primary/5 shadow-sm py-6">
+          <CardHeader>
+            <CardTitle>Split Suggestions</CardTitle>
+            <CardDescription>Ways to smooth out tight pay periods</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {suggestions.map((s, idx) => (
+              <div key={idx} className="rounded-md border border-primary/20 bg-background p-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">{s.billName}</span>
+                  <span
+                    className={`text-xs font-medium ${
+                      s.wouldResolve ? "text-primary" : "text-muted-foreground"
+                    }`}
+                  >
+                    {s.wouldResolve ? "Resolves shortfall" : "Partial help"}
+                  </span>
+                </div>
+                <p className="text-muted-foreground text-xs mt-1">{s.reasoning}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <Card>
+        <Card className="shadow-sm border-border/50 py-6">
           <CardHeader>
             <CardTitle>Income Sources</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             {income.map((i) => (
               <div key={i.id} className="flex items-center justify-between gap-2 text-sm border-b pb-2 flex-wrap">
-                <span>{i.name}</span>
+                <span className="font-medium">{i.name}</span>
                 <div className="flex items-center gap-2">
                   {editingIncomeId === i.id ? (
                     <EditAmountForm
@@ -336,7 +336,7 @@ async function loadCoaching() {
                     />
                   ) : (
                     <>
-                      <span>${Number(i.amount).toFixed(2)}</span>
+                      <span className="font-semibold">${Number(i.amount).toFixed(2)}</span>
                       <button
                         onClick={() => setEditingIncomeId(i.id)}
                         className="text-muted-foreground/50 hover:text-primary transition-colors"
@@ -371,14 +371,14 @@ async function loadCoaching() {
                 Next pay date
               </Label>
               <Input name="nextPayDate" type="date" required />
-              <Button type="submit" className="w-full">
+              <Button type="submit" className="w-full font-semibold">
                 Add Income
               </Button>
             </form>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="shadow-sm border-border/50 py-6">
           <CardHeader>
             <CardTitle>Bills</CardTitle>
           </CardHeader>
@@ -393,9 +393,15 @@ async function loadCoaching() {
                       <Circle size={16} className="text-muted-foreground/40" />
                     )}
                   </button>
-                  <span className={b.paidThisMonth ? "text-muted-foreground line-through" : ""}>
-                    {b.name} (due {b.dueDate})
-                  </span>
+                  <div>
+                    <span className={b.paidThisMonth ? "text-muted-foreground line-through" : ""}>
+                      {b.name}
+                    </span>
+                    <span className="text-muted-foreground text-xs ml-1">
+                      Due {b.dueDate}
+                      {b.category && ` . ${b.category}`}
+                    </span>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   {editingBillId === b.id ? (
@@ -440,7 +446,7 @@ async function loadCoaching() {
                 <input type="checkbox" name="splittable" />
                 Splittable into two payments
               </label>
-              <Button type="submit" className="w-full">
+              <Button type="submit" className="w-full font-semibold">
                 Add Bill
               </Button>
             </form>
@@ -448,21 +454,21 @@ async function loadCoaching() {
         </Card>
 
         {opportunities.length > 0 && (
-  <Card className="border-primary/30 bg-primary/5">
-    <CardHeader>
-      <CardTitle>Extra Paycheck Opportunities</CardTitle>
-      <CardDescription>Months with a 3rd paycheck — good chances to get ahead</CardDescription>
-    </CardHeader>
-    <CardContent className="space-y-3">
-      {opportunities.map((o, idx) => (
-        <div key={idx} className="rounded-md border border-primary/20 bg-background p-3 text-sm">
-          <div className="font-medium">{new Date(o.payDate).toLocaleDateString()}</div>
-          <p className="text-muted-foreground text-xs mt-1">{o.reasoning}</p>
-        </div>
-      ))}
-    </CardContent>
-  </Card>
-)}
+          <Card className="border-primary/30 bg-primary/5 shadow-sm py-6">
+            <CardHeader>
+              <CardTitle>Extra Paycheck Opportunities</CardTitle>
+              <CardDescription>Months with a 3rd paycheck — good chances to get ahead</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {opportunities.map((o, idx) => (
+                <div key={idx} className="rounded-md border border-primary/20 bg-background p-3 text-sm">
+                  <div className="font-medium">{new Date(o.payDate).toLocaleDateString()}</div>
+                  <p className="text-muted-foreground text-xs mt-1">{o.reasoning}</p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
       </div>
     </main>
   );

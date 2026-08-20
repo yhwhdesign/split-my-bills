@@ -284,6 +284,36 @@ rules-engine-only output). Session paused here (near usage limit).
   verified working in production. **Phase 3 (AI coaching layer) is fully complete, deployed,
   and confirmed working end to end.** Session paused here.
 
+- **2026-07-20 (cont'd)**: Made quick mobile-responsive fixes to the dashboard — summary
+  cards grid (`grid-cols-1 sm:grid-cols-3`), Income/Bills two-column grid
+  (`grid-cols-1 md:grid-cols-2`), tighter outer padding on mobile (`p-4 sm:p-8`), and
+  `flex-wrap` on bill/income list rows and pay-period header rows so content wraps instead of
+  overflowing on narrow screens. **These are functional fixes only** — nothing overlapping or
+  broken anymore — **not a real visual redesign**. User confirmed it's usable now but still
+  not close to the BillOut/1Bill-inspired look from the design direction notes. **Flagged as
+  needing its own dedicated design session**: pull up the BillOut/1Bill references again
+  side-by-side with the actual app and rebuild the dashboard's visual structure intentionally
+  (real card styling, spacing rhythm, information grouping) rather than continuing to patch
+  individual Tailwind classes piecemeal. This is real, not-yet-done work — distinct from the
+  "mobile-responsive" checkbox, which is now reasonably satisfied functionally.
+
+- **2026-07-21**: Dedicated design session, as planned — pulled up BillOut and 1Bill
+  references again fresh, compared side-by-side with the actual current app, and made a
+  deliberate visual pass rather than more piecemeal tweaks. Changes: added `shadow-sm` +
+  `py-6` (real elevation + breathing room) consistently across every card on the dashboard
+  (summary cards, AI Coach, Pay Periods, Split Suggestions, Opportunities, Income Sources,
+  Bills); bumped summary card numbers to `text-3xl font-bold` with small uppercase-tracked
+  labels above them for confident hierarchy; increased outer section spacing
+  (`space-y-8 sm:space-y-10`); made primary buttons `font-semibold` for more visual
+  confidence; added clear typography hierarchy within list rows (bold `font-medium` names,
+  `font-semibold` amounts — previously everything was the same weight); restructured bill
+  rows into a two-line layout (bold name on top, smaller muted "Due X · Category" line
+  below), finally surfacing the `category` field visually for the first time and matching
+  BillOut's pattern of bold-primary-info + small-muted-metadata per row. **Confirmed working
+  in local dev.** This is a real, meaningful visual step toward the BillOut/1Bill design
+  direction — not yet a full match, but no longer just "functional and unstyled." Good
+  natural stopping point for the session.
+
 - **2026-07-20 (cont'd)**: Deployed to production on Vercel. Merged `dev` into `main` for the
   first time since session one (resolved an expected merge conflict on `PROJECT_STATE.md` by
   taking `dev`'s version, since `main` had been untouched since the initial commit — every
@@ -407,14 +437,15 @@ finalized when Phase 1 UI work begins.
 
 ## 7. Current Status
 
-**Phase:** Phase 1 complete. Phase 2 FULLY COMPLETE. **Phase 3 FULLY COMPLETE, DEPLOYED, AND
-VERIFIED LIVE** — dual AI provider system (Ollama dev / Gemini production) and the Usage
-Governor (daily ceiling tracking, response caching, graceful degradation) both confirmed
-working end to end in production at https://split-my-bills.vercel.app (tested on real mobile).
-Known gap: mobile layout is not yet responsive (Phase 5 scope, not a bug).
-**Next: Phase 4 (statement import/trend analysis) or Phase 5 (PWA/mobile polish) — core
-functionality (auth, full CRUD, cashflow engine, AI coaching, cost governance) is complete.**
-**Last updated:** 2026-07-20 (session end, Usage Governor verified live)
+**Phase:** Phase 1 complete. Phase 2 FULLY COMPLETE. Phase 3 FULLY COMPLETE, DEPLOYED, AND
+VERIFIED LIVE. Mobile-responsive functional fixes done. **Design pass in progress**: real
+elevation/shadows, spacing rhythm, typography hierarchy, and bold-color button treatment
+applied across the whole dashboard, moving meaningfully toward the BillOut/1Bill design
+direction — confirmed working in local dev, not yet deployed/pushed. Still not a full visual
+match to the references; further design refinement remains a good future task.
+**Next: push and deploy today's design changes, then continue design refinement OR move to
+Phase 4 (statement import) — core functionality remains complete either way.**
+**Last updated:** 2026-07-21
 
 ---
 
