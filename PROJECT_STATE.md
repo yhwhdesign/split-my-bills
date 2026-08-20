@@ -325,6 +325,26 @@ rules-engine-only output). Session paused here (near usage limit).
   regardless of name length or amount digit count. **Confirmed looking noticeably better —
   good stopping point for the design session.**
 
+- **2026-07-21 (cont'd)**: Continued the design pass — added a proper header with app name +
+  subtitle (replacing bare "Dashboard"), category icons on bills (`getCategoryIcon()` helper,
+  soft-match on common category names with a generic fallback), pill-shaped colored status
+  badges on pay periods ("Short $X" / "On track" — replacing plain colored text), and a
+  visual income-vs-bills progress bar under the summary cards (green/yellow/red depending on
+  percentage of income committed to bills).
+
+  **Found and fixed a significant, long-standing bug**: user correctly noticed the app had
+  essentially NO color anywhere except the AI Coach card's tinted background — everything else
+  read as flat gray. Root cause: `globals.css` had **two** `--primary` definitions —
+  `:root` (light mode, what was actually being viewed) was still at shadcn's original default
+  gray (`oklch(0.205 0 0)`, zero chroma/saturation) from the very first scaffold, while only
+  `.dark`'s `--primary` had ever been updated to our real indigo accent color back when we
+  set the design direction. Since the app has been in light mode this whole time, **every
+  `bg-primary`/`text-primary`/`border-primary` class across the entire app has been silently
+  rendering as gray since the color was first "set" many sessions ago** — a real, significant
+  oversight now finally caught and fixed by updating `:root`'s `--primary` to match the
+  intended indigo (`oklch(0.585 0.233 277.117)`). **Confirmed fixed — real color now visible
+  throughout the app**: buttons, badges, borders, the progress bar, everything.
+
 - **2026-07-20 (cont'd)**: Deployed to production on Vercel. Merged `dev` into `main` for the
   first time since session one (resolved an expected merge conflict on `PROJECT_STATE.md` by
   taking `dev`'s version, since `main` had been untouched since the initial commit — every
@@ -449,15 +469,14 @@ finalized when Phase 1 UI work begins.
 ## 7. Current Status
 
 **Phase:** Phase 1 complete. Phase 2 FULLY COMPLETE. Phase 3 FULLY COMPLETE, DEPLOYED, AND
-VERIFIED LIVE. Mobile-responsive functional fixes done. **Design pass complete for today,
-deployed and verified live on both desktop and mobile**: real elevation/shadows, spacing
-rhythm, typography hierarchy, bold-color button treatment, and column-aligned list rows
-(fixed a name-length-causes-misalignment bug) all applied across the dashboard, moving
-meaningfully toward the BillOut/1Bill design direction. Not yet a full visual match to the
-references — further design refinement remains a good future task, not urgent.
-**Next: continue design refinement OR move to Phase 4 (statement import) — core
-functionality remains complete either way.**
-**Last updated:** 2026-07-21 (design pass deployed)
+VERIFIED LIVE. Mobile-responsive functional fixes done. **Design pass ongoing** — header,
+category icons, status badges, and a progress bar added; **and a major bug just fixed**:
+light mode's `--primary` CSS variable had been stuck at shadcn's default gray since the
+color was originally "set" (only `.dark` was ever actually updated) — the whole app has been
+rendering without its intended indigo accent color until just now. Confirmed fixed, real
+color now visible throughout. Not yet committed/deployed as of this fix.
+**Next: commit and deploy this batch, then continue design refinement OR move to Phase 4.**
+**Last updated:** 2026-07-21 (color bug fixed)
 
 ---
 

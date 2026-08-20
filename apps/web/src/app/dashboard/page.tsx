@@ -14,6 +14,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Pencil, Trash2, Check, X, CheckCircle2, Circle } from "lucide-react";
+import { Home, Zap, Wifi, Car, ShoppingCart, HeartPulse, Tag } from "lucide-react";
+
 
 type IncomeSource = {
   id: string;
@@ -178,9 +180,12 @@ async function loadCoaching() {
 
   return (
     <main className="mx-auto max-w-4xl p-4 sm:p-8 space-y-6 sm:space-y-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Dashboard</h1>
-        <Button variant="outline" onClick={handleLogout}>
+      <div className="flex items-center justify-between border-b pb-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Split My Bills</h1>
+          <p className="text-sm text-muted-foreground">Here's where things stand today</p>
+        </div>
+        <Button variant="outline" onClick={handleLogout} className="shrink-0">
           Log out
         </Button>
       </div>
@@ -213,6 +218,27 @@ async function loadCoaching() {
           </CardHeader>
         </Card>
       </div>
+
+      {totalIncome > 0 && (
+  <div className="rounded-lg border border-border/50 bg-card p-4 shadow-sm">
+    <div className="flex justify-between text-xs text-muted-foreground mb-2">
+      <span>Bills</span>
+      <span>{Math.min(100, Math.round((totalBills / totalIncome) * 100))}% of income</span>
+    </div>
+    <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+      <div
+        className={`h-full rounded-full transition-all ${
+          totalBills / totalIncome > 1
+            ? "bg-destructive"
+            : totalBills / totalIncome > 0.8
+            ? "bg-yellow-500"
+            : "bg-primary"
+        }`}
+            style={{ width: `${Math.min(100, (totalBills / totalIncome) * 100)}%` }}
+      />
+    </div>
+  </div>
+)}
 
       <Card className="border-primary/30 bg-primary/5 shadow-sm py-6">
         <CardHeader>
@@ -265,11 +291,13 @@ async function loadCoaching() {
                     </div>
                   </div>
                   {p.isCashflowRisk ? (
-                    <span className="text-destructive text-xs font-medium">
+                    <span className="rounded-full bg-destructive/10 text-destructive text-xs font-semibold px-2.5 py-1">
                       Short ${p.shortfall.toFixed(2)}
                     </span>
                   ) : (
-                    <span className="text-muted-foreground text-xs">OK</span>
+                    <span className="rounded-full bg-primary/10 text-primary text-xs font-semibold px-2.5 py-1">
+                      On track
+                    </span>
                   )}
                 </button>
 
@@ -397,9 +425,10 @@ async function loadCoaching() {
                     <span className={b.paidThisMonth ? "text-muted-foreground line-through" : ""}>
                       {b.name}
                     </span>
-                    <span className="text-muted-foreground text-xs ml-1">
-                      Due {b.dueDate}
-                      {b.category && ` . ${b.category}`}
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      {getCategoryIcon(b.category)}
+                        Due {b.dueDate}
+                        {b.category && ` · ${b.category}`}
                     </span>
                   </div>
                 </div>
@@ -505,4 +534,17 @@ function EditAmountForm({
       </button>
     </div>
   );
+}
+
+function getCategoryIcon(category: string | null) {
+  const map: Record<string, typeof Tag> = {
+    housing: Home,
+    utilities: Zap,
+    internet: Wifi,
+    transportation: Car,
+    groceries: ShoppingCart,
+    health: HeartPulse,
+  };
+  const Icon = category ? map[category.toLowerCase()] ?? Tag : Tag;
+  return <Icon size={14} className="text-muted-foreground/60" />;
 }
