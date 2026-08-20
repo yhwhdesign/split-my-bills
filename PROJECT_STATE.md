@@ -131,6 +131,19 @@ The LLM only explains/prioritizes those numbers in plain English — it does not
   spending patterns) and cashflow projections built from real historical data. Zero new
   vendor cost — no bank API, just file parsing.
 - [ ] **Phase 5 — PWA Polish**: manifest.json, service worker, installability, offline fallback, mobile-responsive UI pass, "update available" refresh prompt flow, iOS install-guidance screen (see backlog note below)
+- [ ] **Phase 6 — Visual Design System & Polish**: a dedicated phase to actually close the gap
+  toward feeling like a genuinely shippable, designed product (BillOut/1Bill-level), not just
+  a functional app. Consolidates previously-scattered backlog design ideas into real scope:
+  (1) "Remaining" card color gradient (green→yellow→red) + warning icon; (2) collapsible
+  "add income/bill" forms with progressive disclosure; (3) pay-date + bill-date calendar
+  visualization; (4) "Recurring" vs "One-time" bill grouping; (5) spending trend charts
+  (ties to Phase 4 data); (6) distinct header/dropdown coloring on expandable cards;
+  (7) a genuine design-system pass — consistent spacing scale, refined typography beyond the
+  current ad-hoc sizing, possibly custom illustration/empty-states, real micro-interactions
+  (transitions, hover states, loading skeletons instead of plain "Loading..." text). This is
+  intentionally the LAST core phase — real design polish is most effective once all features
+  exist to be polished, not before. Expect this to take real, iterative time across multiple
+  sessions, not one sitting.
 
 ---
 
