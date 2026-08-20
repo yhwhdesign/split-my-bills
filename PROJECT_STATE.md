@@ -314,6 +314,17 @@ rules-engine-only output). Session paused here (near usage limit).
   direction — not yet a full match, but no longer just "functional and unstyled." Good
   natural stopping point for the session.
 
+- **2026-07-21 (cont'd)**: Committed and deployed today's design pass — merged `dev` → `main`,
+  pushed, confirmed working live on both desktop and mobile. User caught a real bug: long
+  bill/income names caused the entire amount+icons block to wrap below the name (a side
+  effect of the earlier mobile `flex-wrap` fix), breaking column alignment of dollar amounts
+  row to row. Fixed by restructuring both list rows: name/category side gets
+  `flex-1 min-w-0` (wraps/shrinks freely without pushing anything), amount+icons side gets
+  `shrink-0` (never gives up space, stays locked right), and amounts got a fixed
+  `min-w-[70px] text-right` so dollar figures stay vertically aligned in a clean column
+  regardless of name length or amount digit count. **Confirmed looking noticeably better —
+  good stopping point for the design session.**
+
 - **2026-07-20 (cont'd)**: Deployed to production on Vercel. Merged `dev` into `main` for the
   first time since session one (resolved an expected merge conflict on `PROJECT_STATE.md` by
   taking `dev`'s version, since `main` had been untouched since the initial commit — every
@@ -438,14 +449,15 @@ finalized when Phase 1 UI work begins.
 ## 7. Current Status
 
 **Phase:** Phase 1 complete. Phase 2 FULLY COMPLETE. Phase 3 FULLY COMPLETE, DEPLOYED, AND
-VERIFIED LIVE. Mobile-responsive functional fixes done. **Design pass in progress**: real
-elevation/shadows, spacing rhythm, typography hierarchy, and bold-color button treatment
-applied across the whole dashboard, moving meaningfully toward the BillOut/1Bill design
-direction — confirmed working in local dev, not yet deployed/pushed. Still not a full visual
-match to the references; further design refinement remains a good future task.
-**Next: push and deploy today's design changes, then continue design refinement OR move to
-Phase 4 (statement import) — core functionality remains complete either way.**
-**Last updated:** 2026-07-21
+VERIFIED LIVE. Mobile-responsive functional fixes done. **Design pass complete for today,
+deployed and verified live on both desktop and mobile**: real elevation/shadows, spacing
+rhythm, typography hierarchy, bold-color button treatment, and column-aligned list rows
+(fixed a name-length-causes-misalignment bug) all applied across the dashboard, moving
+meaningfully toward the BillOut/1Bill design direction. Not yet a full visual match to the
+references — further design refinement remains a good future task, not urgent.
+**Next: continue design refinement OR move to Phase 4 (statement import) — core
+functionality remains complete either way.**
+**Last updated:** 2026-07-21 (design pass deployed)
 
 ---
 

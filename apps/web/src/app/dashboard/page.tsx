@@ -325,9 +325,9 @@ async function loadCoaching() {
           </CardHeader>
           <CardContent className="space-y-4">
             {income.map((i) => (
-              <div key={i.id} className="flex items-center justify-between gap-2 text-sm border-b pb-2 flex-wrap">
-                <span className="font-medium">{i.name}</span>
-                <div className="flex items-center gap-2">
+              <div key={i.id} className="flex items-start justify-between gap-2 text-sm border-b pb-2">
+                <span className="font-medium min-w-0 break-words flex-1">{i.name}</span>
+                <div className="flex items-center gap-2 shrink-0">
                   {editingIncomeId === i.id ? (
                     <EditAmountForm
                       initialValue={i.amount}
@@ -336,7 +336,7 @@ async function loadCoaching() {
                     />
                   ) : (
                     <>
-                      <span className="font-semibold">${Number(i.amount).toFixed(2)}</span>
+                      <span className="font-semibold min-w-[70px] text-right inline-block">${Number(i.amount).toFixed(2)}</span>
                       <button
                         onClick={() => setEditingIncomeId(i.id)}
                         className="text-muted-foreground/50 hover:text-primary transition-colors"
@@ -384,8 +384,8 @@ async function loadCoaching() {
           </CardHeader>
           <CardContent className="space-y-4">
             {bills.map((b) => (
-              <div key={b.id} className="flex items-center justify-between gap-2 text-sm border-b pb-2 flex-wrap">
-                <div className="flex items-center gap-2">
+              <div key={b.id} className="flex items-start justify-between gap-2 text-sm border-b pb-2">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
                   <button onClick={() => handleTogglePaid(b.id, b.paidThisMonth)}>
                     {b.paidThisMonth ? (
                       <CheckCircle2 size={16} className="text-primary" />
@@ -393,7 +393,7 @@ async function loadCoaching() {
                       <Circle size={16} className="text-muted-foreground/40" />
                     )}
                   </button>
-                  <div>
+                  <div className="flex flex-col min-w-0">
                     <span className={b.paidThisMonth ? "text-muted-foreground line-through" : ""}>
                       {b.name}
                     </span>
@@ -403,7 +403,7 @@ async function loadCoaching() {
                     </span>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                   {editingBillId === b.id ? (
                     <EditAmountForm
                       initialValue={b.amount}
@@ -412,7 +412,9 @@ async function loadCoaching() {
                     />
                   ) : (
                     <>
-                      <span>${Number(b.amount).toFixed(2)}</span>
+                      <span className="font-semibold min-w-[70px] text-right inline-block">
+                        ${Number(b.amount).toFixed(2)}
+                      </span>
                       <button
                         onClick={() => setEditingBillId(b.id)}
                         className="text-muted-foreground/50 hover:text-primary transition-colors"
