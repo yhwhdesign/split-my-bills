@@ -177,7 +177,7 @@ async function loadCoaching() {
   }
 
   return (
-    <main className="mx-auto max-w-4xl p-8 space-y-8">
+    <main className="mx-auto max-w-4xl p-4 sm:p-8 space-y-6 sm:space-y-8">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Dashboard</h1>
         <Button variant="outline" onClick={handleLogout}>
@@ -185,7 +185,7 @@ async function loadCoaching() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Total Income</CardDescription>
@@ -318,7 +318,7 @@ async function loadCoaching() {
   </Card>
 )}
 
-      <div className="grid grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         <Card>
           <CardHeader>
             <CardTitle>Income Sources</CardTitle>

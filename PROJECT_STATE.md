@@ -276,6 +276,14 @@ rules-engine-only output). Session paused here (near usage limit).
   out the original three-part AI vision from session one: rules engine computes, AI explains,
   governor guarantees it never costs anything.
 
+- **2026-07-20 (cont'd, session end)**: Deployed the Usage Governor to production. Merged
+  `dev` → `main` (this time via an interactive Vim merge-commit prompt — noted as a normal,
+  expected part of `git merge` when there's no `-m` flag; save and exit with `:wq`). Pushed to
+  `origin/main`. **Confirmed working live on https://split-my-bills.vercel.app via mobile** —
+  the full app, including the AI coaching pipeline and Usage Governor, is now deployed and
+  verified working in production. **Phase 3 (AI coaching layer) is fully complete, deployed,
+  and confirmed working end to end.** Session paused here.
+
 - **2026-07-20 (cont'd)**: Deployed to production on Vercel. Merged `dev` into `main` for the
   first time since session one (resolved an expected merge conflict on `PROJECT_STATE.md` by
   taking `dev`'s version, since `main` had been untouched since the initial commit — every
@@ -399,17 +407,14 @@ finalized when Phase 1 UI work begins.
 
 ## 7. Current Status
 
-**Phase:** Phase 1 complete. Phase 2 FULLY COMPLETE. **Phase 3 FULLY COMPLETE** — dual AI
-provider system (Ollama dev / Gemini production) verified working on both paths, plus the
-Usage Governor (daily ceiling tracking, response caching, graceful degradation messaging)
-guaranteeing zero billing surprises now that AI calls are live in production. **App is LIVE
-at https://split-my-bills.vercel.app.** Known gap: mobile layout is not yet responsive
-(Phase 5 scope, not a bug); Usage Governor built but not yet deployed/tested live in
-production (built and compiling locally, migration run locally — needs deploy + real-world
-verification next).
-**Next: deploy Phase 3.5 work to production and verify, then Phase 4 (statement import) or
-Phase 5 (PWA/mobile polish) — core functionality is essentially complete at this point.**
-**Last updated:** 2026-07-20 (Usage Governor built)
+**Phase:** Phase 1 complete. Phase 2 FULLY COMPLETE. **Phase 3 FULLY COMPLETE, DEPLOYED, AND
+VERIFIED LIVE** — dual AI provider system (Ollama dev / Gemini production) and the Usage
+Governor (daily ceiling tracking, response caching, graceful degradation) both confirmed
+working end to end in production at https://split-my-bills.vercel.app (tested on real mobile).
+Known gap: mobile layout is not yet responsive (Phase 5 scope, not a bug).
+**Next: Phase 4 (statement import/trend analysis) or Phase 5 (PWA/mobile polish) — core
+functionality (auth, full CRUD, cashflow engine, AI coaching, cost governance) is complete.**
+**Last updated:** 2026-07-20 (session end, Usage Governor verified live)
 
 ---
 
