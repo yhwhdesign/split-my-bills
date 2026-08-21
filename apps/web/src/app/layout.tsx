@@ -44,9 +44,16 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={cn("h-full", "antialiased", geistSans.variable, geistMono.variable, "font-sans", figtree.variable)}
     >
+    <head>
+      <link
+        rel="apple-touch-startup-image"
+        href="/splash-1170x2532.png"
+        media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)"
+      />
+    </head>
       <body className="min-h-full flex flex-col">
         <ServiceWorkerRegistration />
-          {children}
+        {children}
       </body>
     </html>
   );
