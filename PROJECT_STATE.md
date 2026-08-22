@@ -454,6 +454,18 @@ rules-engine-only output). Session paused here (near usage limit).
   instead of a branded splash) rather than keep debugging a small polish item** — correct
   call, since core installability is fully proven working and this is genuinely low-stakes.
   Logged as a known, low-priority loose end for Phase 6 rather than something broken.
+
+- **2026-07-22 (cont'd)**: Built a branded install-prompt banner (`InstallPrompt` component)
+  to solve the discovery problem — without it, most users would never know the app is
+  installable, especially on iOS which has no automatic browser install banner. Detects
+  platform via user agent: iOS gets step-by-step Share → Add to Home Screen instructions
+  (since iOS doesn't allow a programmatic install trigger); Android gets a real one-tap
+  "Install App" button using the native `beforeinstallprompt` browser API. Only shows if not
+  already running standalone, and remembers dismissal via `localStorage` so it doesn't nag
+  repeatedly. Styled consistently with the app's existing tinted-card visual language (reuses
+  the `Logo` component and the same `bg-primary/5` treatment as other suggestion cards) rather
+  than looking like a generic browser popup. Deployed and **confirmed working correctly on a
+  real phone** with the right platform-specific instructions showing.
 - **Email payment-confirmation scanning** (added 2026-07-19, user idea, researched): opt-in
   feature to search a user's email (via Gmail API OAuth, read-only scope) for payment
   confirmation emails ("thank you for your payment," receipts, etc.) to help auto-detect
