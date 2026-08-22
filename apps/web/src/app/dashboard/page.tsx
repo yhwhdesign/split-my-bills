@@ -16,6 +16,7 @@ import {
 import { Pencil, Trash2, Check, X, CheckCircle2, Circle } from "lucide-react";
 import { Home, Zap, Wifi, Car, ShoppingCart, HeartPulse, Tag } from "lucide-react";
 import { Logo } from "@/components/logo";
+import { InstallPrompt } from "@/components/install-prompt";
 
 type IncomeSource = {
   id: string;
@@ -197,6 +198,8 @@ async function loadCoaching() {
           Log out
         </Button>
       </div>
+
+      <InstallPrompt />
 
       
       <div className="rounded-2xl bg-zinc-900 p-6 sm:p-8 shadow-lg">
