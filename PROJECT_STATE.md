@@ -428,6 +428,32 @@ rules-engine-only output). Session paused here (near usage limit).
   calendar backlog item, dark mode toggle), and eventually account management (email/password
   change, delete account). Not yet built — good candidate for Phase 6 or its own small phase
   once enough settings-worthy features exist to justify a dedicated page.
+
+- **2026-07-22**: Built PWA installability (Phase 5 core). Designed a custom app icon
+  (two overlapping circles divided by a bar, on indigo — visually represents "splitting a
+  bill into two payments," tying the icon itself to the app's core differentiator rather
+  than a generic finance symbol) and generated it at all required sizes (16/32/180/192/512px)
+  via a Python/cairosvg script. Built `manifest.json` (standalone display, indigo theme
+  color, off-white background color matching the site), added proper `metadata`/`viewport`
+  exports in `layout.tsx` (favicon links, Apple touch icon, `appleWebApp` config for iOS
+  installability), built a minimal service worker (`public/sw.js` — pass-through only, no
+  offline caching yet, just enough to satisfy installability requirements) and a
+  `ServiceWorkerRegistration` client component to register it. Hit one user error (forgot to
+  add the import for the registration component) — quickly self-corrected. **Confirmed
+  working on real iPhone**: icon shows correctly in the share sheet and as the home-screen
+  icon, app opens standalone (no browser chrome) when launched from the home screen — real,
+  working PWA installability.
+
+  Attempted to add a proper branded splash screen (generated a matching off-white/logo splash
+  PNG at a common iPhone resolution, wired via `apple-touch-startup-image` link tag) to
+  replace the blank white loading flash. **Confirmed the file was correctly committed to git
+  at the right path**, but the deployed production site returned 404 for it even after a
+  clean merge/deploy — likely a Vercel build-cache issue, attempted a forced rebuild
+  (`vercel --prod --force`) but didn't get to confirm the result before deciding to
+  deprioritize it. **User made the call to accept the minor cosmetic gap (brief white flash
+  instead of a branded splash) rather than keep debugging a small polish item** — correct
+  call, since core installability is fully proven working and this is genuinely low-stakes.
+  Logged as a known, low-priority loose end for Phase 6 rather than something broken.
 - **Email payment-confirmation scanning** (added 2026-07-19, user idea, researched): opt-in
   feature to search a user's email (via Gmail API OAuth, read-only scope) for payment
   confirmation emails ("thank you for your payment," receipts, etc.) to help auto-detect
