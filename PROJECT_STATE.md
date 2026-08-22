@@ -144,6 +144,12 @@ The LLM only explains/prioritizes those numbers in plain English — it does not
   intentionally the LAST core phase — real design polish is most effective once all features
   exist to be polished, not before. Expect this to take real, iterative time across multiple
   sessions, not one sitting.
+- [ ] **Phase 7 — Savings Guidance (future)**: user clarified the app's core vision (2026-07-22):
+  input all data once, get clear guidance across paychecks/bills/3-paycheck-month timing, see
+  a clear view of the rest of the year at a glance — then expand into an AI-assisted savings
+  advisor that helps identify opportunities to save money based on the user's real financial
+  patterns. Not yet scoped in detail — flagged as the natural next major feature area after
+  core bill/split functionality and Phase 6 polish are solid.
 
 ---
 
@@ -466,6 +472,46 @@ rules-engine-only output). Session paused here (near usage limit).
   the `Logo` component and the same `bg-primary/5` treatment as other suggestion cards) rather
   than looking like a generic browser popup. Deployed and **confirmed working correctly on a
   real phone** with the right platform-specific instructions showing.
+- **Auto-categorization + icons, and real split actions built** (2026-07-22): built
+  `suggestCategory()` (keyword-matching against bill name, e.g. "Comcast Internet" → 
+  "Internet") — deliberately logic-based, not AI, since simple keyword matching doesn't need
+  real reasoning and using AI here would burn Gemini quota unnecessarily; wired into the
+  "Add Bill" form so category auto-fills as the name is typed, while respecting manual edits.
+  Expanded `getCategoryIcon()`'s icon mapping to match the fuller category list. **User
+  clarified the app's core purpose more precisely**: input data once, get clear guidance
+  across paychecks/bills/3-paycheck-month timing, see the rest of the year clearly, with a
+  future savings-focused AI advisor layer — logged as a new **Phase 7 (Savings Guidance)** in
+  the roadmap. This also surfaced an honest gap: marking a bill "splittable" only ever
+  generated a suggestion, never actually created real split payments. Built the real action:
+  `/api/bills/[id]/split` creates two actual `Payment` records (half the bill amount each,
+  linked via `splitGroupId`) using the fields that had existed unused in the schema since
+  session one, wrapped in a DB transaction so both halves are created together or not at all.
+  Added a "Split this bill" button to the Split Suggestions card. **Not yet tested end to
+  end** — the next-payday date math in the handler is an honest rough placeholder, flagged
+  for refinement once the basic action is confirmed working.
+
+- **2026-07-22 (cont'd)**: Fresh full-file replacement of `dashboard/page.tsx` after the
+  category auto-suggest edit accidentally duplicated the bill form's name/category fields and
+  displaced the "Splittable into two payments" checkbox (also lost the `dueDate` field in the
+  same mix-up) — rewritten cleanly with all `useState` calls consolidated at the top and every
+  feature verified present exactly once.
+
+  **Found and fixed a significant, real bug**: user correctly noticed the Upcoming Pay
+  Periods list showed a wrong next-payday date for a real biweekly income entry (today's
+  actual payday showing the 11th as the next one, not 14 days out). Root cause: the
+  split-suggestions engine had been reading pay schedule/anchor date from `User.paySchedule`
+  and `User.paydayAnchor` — fields set once at signup as a placeholder (`paydayAnchor` was
+  literally `new Date()` at account creation) — instead of from the real `IncomeSource`
+  record's actual `frequency`/`nextPayDate` fields the user enters through the income form.
+  **This meant the entire cashflow engine had been calculating every pay period from an
+  irrelevant signup timestamp since Phase 2 was first built**, not from real user data — a
+  genuine architectural miss that simply hadn't surfaced clearly with earlier test data.
+  Fixed in `/api/split-suggestions/route.ts`: now uses `incomeSources[0].frequency` and
+  `incomeSources[0].nextPayDate` instead of the `User` table fields. Honest known
+  simplification, consistent with one flagged earlier: uses the first income source as the
+  timing anchor, accurate for a single income source, a future refinement needed for users
+  with multiple differently-scheduled incomes. **Not yet re-tested after the fix.**
+
 - **Email payment-confirmation scanning** (added 2026-07-19, user idea, researched): opt-in
   feature to search a user's email (via Gmail API OAuth, read-only scope) for payment
   confirmation emails ("thank you for your payment," receipts, etc.) to help auto-detect

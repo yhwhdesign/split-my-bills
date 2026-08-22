@@ -27,12 +27,13 @@ export async function GET() {
     splittable: b.splittable,
   }));
 
+  const primaryIncome = incomeSources[0];
   const periods = calculatePayPeriods(
-  totalIncome,
-  user.paySchedule as PaySchedule,
-  user.paydayAnchor,
-  sharedBills
-);
+    totalIncome,
+    primaryIncome.frequency as PaySchedule,
+    primaryIncome.nextPayDate,
+    sharedBills
+  );
 
 const suggestions = generateSplitSuggestions(periods);
 const opportunities = generateOpportunitySuggestions(periods);

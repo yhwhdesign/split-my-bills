@@ -1,8 +1,8 @@
 "use client";
 
-import { normalizeToMonthly, type PaySchedule } from "@split-my-bills/shared";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { normalizeToMonthly, type PaySchedule } from "@split-my-bills/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,10 +13,29 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Pencil, Trash2, Check, X, CheckCircle2, Circle } from "lucide-react";
-import { Home, Zap, Wifi, Car, ShoppingCart, HeartPulse, Tag } from "lucide-react";
+import {
+  Pencil,
+  Trash2,
+  Check,
+  X,
+  CheckCircle2,
+  Circle,
+  Home,
+  Zap,
+  Wifi,
+  Car,
+  ShoppingCart,
+  HeartPulse,
+  Tag,
+  Droplet,
+  Flame,
+  Phone,
+  Tv,
+  CreditCard,
+} from "lucide-react";
 import { Logo } from "@/components/logo";
 import { InstallPrompt } from "@/components/install-prompt";
+import { suggestCategory } from "@/lib/categorize-bill";
 
 type IncomeSource = {
   id: string;
@@ -41,53 +60,53 @@ export default function DashboardPage() {
   const [income, setIncome] = useState<IncomeSource[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
   const [periods, setPeriods] = useState<any[]>([]);
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [opportunities, setOpportunities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingIncomeId, setEditingIncomeId] = useState<string | null>(null);
   const [editingBillId, setEditingBillId] = useState<string | null>(null);
   const [expandedPeriod, setExpandedPeriod] = useState<number | null>(null);
-  const [opportunities, setOpportunities] = useState<any[]>([]);
   const [coaching, setCoaching] = useState<string | null>(null);
   const [coachingLoading, setCoachingLoading] = useState(false);
   const [limitReached, setLimitReached] = useState(false);
   const [userName, setUserName] = useState<string | null>(null);
 
-
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (!loading) {
+      loadCoaching();
+    }
+  }, [loading]);
 
   async function loadData() {
     const [incomeRes, billsRes, periodsRes, userRes] = await Promise.all([
       fetch("/api/income"),
       fetch("/api/bills"),
       fetch("/api/split-suggestions"),
-      fetch("/api/user/me"), // Fetch user info
+      fetch("/api/user/me"),
     ]);
     setIncome(await incomeRes.json());
     setBills(await billsRes.json());
-   const periodsData = await periodsRes.json();
+    const periodsData = await periodsRes.json();
     setPeriods(periodsData.periods ?? []);
     setSuggestions(periodsData.suggestions ?? []);
     setOpportunities(periodsData.opportunities ?? []);
     const userData = await userRes.json();
-    setUserName(userData.name ?? null); // Set user name
+    setUserName(userData.name ?? null);
     setLoading(false);
   }
 
-  useEffect(() => {
-  if (!loading) {
-    loadCoaching();
+  async function loadCoaching() {
+    setCoachingLoading(true);
+    const res = await fetch("/api/ai-coaching");
+    const data = await res.json();
+    setCoaching(data.coaching);
+    setLimitReached(!!data.limitReached);
+    setCoachingLoading(false);
   }
-}, [loading]);
-
-async function loadCoaching() {
-  setCoachingLoading(true);
-  const res = await fetch("/api/ai-coaching");
-  const data = await res.json();
-  setCoaching(data.coaching);
-  setLimitReached(!!data.limitReached);
-  setCoachingLoading(false);
-}
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -169,15 +188,30 @@ async function loadCoaching() {
     loadData();
   }
 
+  async function handleSplitBill(billId: string, periodStart: string) {
+    const firstDate = new Date().toISOString();
+    const secondDate = new Date(periodStart);
+    secondDate.setMonth(secondDate.getMonth() + 1); // rough placeholder — refine later
+    await fetch(`/api/bills/${billId}/split`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        firstDate,
+        secondDate: secondDate.toISOString(),
+      }),
+    });
+    loadData();
+  }
+
   const totalIncome = income.reduce(
     (sum, i) => sum + normalizeToMonthly(Number(i.amount), i.frequency as PaySchedule),
-  0
+    0
   );
   const totalBills = bills.reduce((sum, b) => sum + Number(b.amount), 0);
   const currentPeriod = periods.length > 0 ? periods[0] : null;
-  const periodRemaining = currentPeriod ? currentPeriod.income - currentPeriod.totalBillAmount : totalIncome - totalBills;
-  const [suggestions, setSuggestions] = useState<any[]>([]);
-
+  const periodRemaining = currentPeriod
+    ? currentPeriod.income - currentPeriod.totalBillAmount
+    : totalIncome - totalBills;
 
   if (loading) {
     return <main className="p-8">Loading...</main>;
@@ -187,12 +221,10 @@ async function loadCoaching() {
     <main className="mx-auto max-w-4xl p-4 sm:p-8 space-y-6 sm:space-y-8">
       <div className="flex items-center justify-between border-b pb-4">
         <div>
-          <div>
-            <Logo />
-            <p className="text-sm text-muted-foreground mt-1">
-              {userName ? `Welcome back, ${userName}` : "Here's where things stand today"}
-            </p>
-          </div>
+          <Logo />
+          <p className="text-sm text-muted-foreground mt-1">
+            {userName ? `Welcome back, ${userName}` : "Here's where things stand today"}
+          </p>
         </div>
         <Button variant="outline" onClick={handleLogout} className="shrink-0">
           Log out
@@ -201,7 +233,6 @@ async function loadCoaching() {
 
       <InstallPrompt />
 
-      
       <div className="rounded-2xl bg-zinc-900 p-6 sm:p-8 shadow-lg">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-4">
           <div>
@@ -255,19 +286,19 @@ async function loadCoaching() {
           <CardTitle>Your AI Coach</CardTitle>
         </CardHeader>
         <CardContent>
-        {coachingLoading ? (
-          <p className="text-muted-foreground text-sm">Thinking...</p>
-        ) : limitReached ? (
-          <p className="text-muted-foreground text-sm">
-            AI suggestions have reached today's limit — your bills and split suggestions above are
-            still fully accurate. Check back tomorrow for AI coaching.
-          </p>
-        ) : coaching ? (
-          <p className="text-sm whitespace-pre-wrap">{coaching}</p>
-        ) : (
-          <p className="text-muted-foreground text-sm">No suggestions available right now.</p>
-        )}
-      </CardContent>
+          {coachingLoading ? (
+            <p className="text-muted-foreground text-sm">Thinking...</p>
+          ) : limitReached ? (
+            <p className="text-muted-foreground text-sm">
+              AI suggestions have reached today&apos;s limit — your bills and split suggestions
+              above are still fully accurate. Check back tomorrow for AI coaching.
+            </p>
+          ) : coaching ? (
+            <p className="text-sm whitespace-pre-wrap">{coaching}</p>
+          ) : (
+            <p className="text-muted-foreground text-sm">No suggestions available right now.</p>
+          )}
+        </CardContent>
       </Card>
 
       {periods.length > 0 && (
@@ -314,10 +345,7 @@ async function loadCoaching() {
                 {expandedPeriod === idx && p.bills.length > 0 && (
                   <div className="border-t px-3 py-2 space-y-1">
                     {p.bills.map((item: any, i: number) => (
-                      <div
-                        key={i}
-                        className="flex justify-between text-xs text-muted-foreground"
-                      >
+                      <div key={i} className="flex justify-between text-xs text-muted-foreground">
                         <span className="font-medium">{item.bill.name}</span>
                         <span className="font-semibold">${item.bill.amount.toFixed(2)}</span>
                       </div>
@@ -350,6 +378,30 @@ async function loadCoaching() {
                   </span>
                 </div>
                 <p className="text-muted-foreground text-xs mt-1">{s.reasoning}</p>
+                <Button
+                  size="sm"
+                  className="mt-2 font-semibold"
+                  onClick={() => handleSplitBill(s.billId, s.periodStart)}
+                >
+                  Split this bill
+                </Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {opportunities.length > 0 && (
+        <Card className="border-primary/30 bg-primary/5 shadow-sm py-6">
+          <CardHeader>
+            <CardTitle>Extra Paycheck Opportunities</CardTitle>
+            <CardDescription>Months with a 3rd paycheck — good chances to get ahead</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {opportunities.map((o, idx) => (
+              <div key={idx} className="rounded-md border border-primary/20 bg-background p-3 text-sm">
+                <div className="font-medium">{new Date(o.payDate).toLocaleDateString()}</div>
+                <p className="text-muted-foreground text-xs mt-1">{o.reasoning}</p>
               </div>
             ))}
           </CardContent>
@@ -374,7 +426,9 @@ async function loadCoaching() {
                     />
                   ) : (
                     <>
-                      <span className="font-semibold min-w-[70px] text-right inline-block">${Number(i.amount).toFixed(2)}</span>
+                      <span className="font-semibold min-w-[70px] text-right inline-block">
+                        ${Number(i.amount).toFixed(2)}
+                      </span>
                       <button
                         onClick={() => setEditingIncomeId(i.id)}
                         className="text-muted-foreground/50 hover:text-primary transition-colors"
@@ -432,13 +486,17 @@ async function loadCoaching() {
                     )}
                   </button>
                   <div className="flex flex-col min-w-0">
-                    <span className={b.paidThisMonth ? "text-muted-foreground line-through" : ""}>
+                    <span
+                      className={`font-medium ${
+                        b.paidThisMonth ? "text-muted-foreground line-through" : ""
+                      }`}
+                    >
                       {b.name}
                     </span>
                     <span className="text-xs text-muted-foreground flex items-center gap-1">
                       {getCategoryIcon(b.category)}
-                        Due {b.dueDate}
-                        {b.category && ` · ${b.category}`}
+                      Due {b.dueDate}
+                      {b.category && ` · ${b.category}`}
                     </span>
                   </div>
                 </div>
@@ -472,7 +530,20 @@ async function loadCoaching() {
               </div>
             ))}
             <form onSubmit={handleAddBill} className="space-y-2 pt-2">
-              <Input name="name" placeholder="Bill name" required />
+              <Input
+                name="name"
+                placeholder="Bill name"
+                required
+                onChange={(e) => {
+                  const suggestion = suggestCategory(e.target.value);
+                  const categoryInput = e.currentTarget.form?.elements.namedItem(
+                    "category"
+                  ) as HTMLInputElement;
+                  if (suggestion && categoryInput && !categoryInput.dataset.userEdited) {
+                    categoryInput.value = suggestion;
+                  }
+                }}
+              />
               <Input name="amount" type="number" step="0.01" placeholder="Amount" required />
               <Input
                 name="dueDate"
@@ -482,7 +553,13 @@ async function loadCoaching() {
                 placeholder="Day of month due"
                 required
               />
-              <Input name="category" placeholder="Category (optional)" />
+              <Input
+                name="category"
+                placeholder="Category (auto-suggested as you type)"
+                onChange={(e) => {
+                  e.currentTarget.dataset.userEdited = "true";
+                }}
+              />
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" name="splittable" />
                 Splittable into two payments
@@ -493,23 +570,6 @@ async function loadCoaching() {
             </form>
           </CardContent>
         </Card>
-
-        {opportunities.length > 0 && (
-          <Card className="border-primary/30 bg-primary/5 shadow-sm py-6">
-            <CardHeader>
-              <CardTitle>Extra Paycheck Opportunities</CardTitle>
-              <CardDescription>Months with a 3rd paycheck — good chances to get ahead</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {opportunities.map((o, idx) => (
-                <div key={idx} className="rounded-md border border-primary/20 bg-background p-3 text-sm">
-                  <div className="font-medium">{new Date(o.payDate).toLocaleDateString()}</div>
-                  <p className="text-muted-foreground text-xs mt-1">{o.reasoning}</p>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        )}
       </div>
     </main>
   );
@@ -549,11 +609,16 @@ function EditAmountForm({
 function getCategoryIcon(category: string | null) {
   const map: Record<string, typeof Tag> = {
     housing: Home,
-    utilities: Zap,
+    "car loan": Car,
+    "car insurance": Car,
+    electric: Zap,
+    water: Droplet,
+    gas: Flame,
     internet: Wifi,
-    transportation: Car,
-    groceries: ShoppingCart,
-    health: HeartPulse,
+    phone: Phone,
+    subscription: Tv,
+    "health/medical": HeartPulse,
+    "credit card": CreditCard,
   };
   const Icon = category ? map[category.toLowerCase()] ?? Tag : Tag;
   return <Icon size={14} className="text-muted-foreground/60" />;

@@ -4,6 +4,11 @@ import { verifySessionToken } from "@/lib/auth";
 import { cookies } from "next/headers";
 import { getCurrentUserId } from "@/lib/session";
 
+function parseLocalDate(dateString: string): Date {
+  const [year, month, day] = dateString.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
 export async function GET() {
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -32,7 +37,7 @@ export async function POST(request: NextRequest) {
       name,
       amount,
       frequency,
-      nextPayDate: new Date(nextPayDate),
+      nextPayDate: parseLocalDate(nextPayDate),
     },
   });
 
