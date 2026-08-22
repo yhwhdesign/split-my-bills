@@ -2,11 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/session";
 
-function parseLocalDate(dateString: string): Date {
-  const [year, month, day] = dateString.split("-").map(Number);
-  return new Date(year, month - 1, day);
-}
-
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -28,7 +23,7 @@ export async function PATCH(
       ...(name && { name }),
       ...(amount && { amount: Number(amount) }),
       ...(frequency && { frequency }),
-      ...(nextPayDate && { nextPayDate: parseLocalDate(nextPayDate) }),
+      ...(nextPayDate && { nextPayDate: new Date(nextPayDate) }),
     },
   });
 
