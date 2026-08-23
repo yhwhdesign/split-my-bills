@@ -246,7 +246,7 @@ export default function DashboardPage() {
           <div className="sm:border-l sm:border-zinc-700 sm:pl-4">
             <p className="text-xs uppercase tracking-wide text-zinc-400">
               {currentPeriod
-                ? `Remaining (thru ${new Date(currentPeriod.end).toLocaleDateString()})`
+                ? `Remaining (thru ${new Date(currentPeriod.end).toLocaleDateString(undefined, { timeZone: "UTC"})})`
                 : "Remaining"}
             </p>
             <p
@@ -321,7 +321,7 @@ export default function DashboardPage() {
                 >
                   <div>
                     <div className="font-medium">
-                      {new Date(p.payDate).toLocaleDateString()}
+                      {new Date(p.payDate).toLocaleDateString(undefined, { timeZone: "UTC"})}
                       {p.isThreePaycheckMonth && (
                         <span className="ml-2 text-xs text-primary">3-paycheck month</span>
                       )}
@@ -400,7 +400,7 @@ export default function DashboardPage() {
           <CardContent className="space-y-3">
             {opportunities.map((o, idx) => (
               <div key={idx} className="rounded-md border border-primary/20 bg-background p-3 text-sm">
-                <div className="font-medium">{new Date(o.payDate).toLocaleDateString()}</div>
+                <div className="font-medium">{new Date(o.payDate).toLocaleDateString(undefined, { timeZone: "UTC"})}</div>
                 <p className="text-muted-foreground text-xs mt-1">{o.reasoning}</p>
               </div>
             ))}
