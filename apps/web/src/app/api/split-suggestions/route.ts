@@ -33,7 +33,7 @@ export async function GET() {
     primaryIncome.frequency as PaySchedule,
     primaryIncome.nextPayDate,
     sharedBills
-  );
+  ); 
 
 const suggestions = generateSplitSuggestions(periods);
 const opportunities = generateOpportunitySuggestions(periods);
