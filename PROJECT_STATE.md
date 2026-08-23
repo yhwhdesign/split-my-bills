@@ -512,6 +512,52 @@ rules-engine-only output). Session paused here (near usage limit).
   timing anchor, accurate for a single income source, a future refinement needed for users
   with multiple differently-scheduled incomes. **Not yet re-tested after the fix.**
 
+- **2026-07-22 (cont'd)**: User reverted local code to a previous push to troubleshoot a
+  cluster of real usability issues found while testing with real paycheck/bill data (see
+  below) — this **also reverted the just-made, uncommitted pay-period date fix**, which
+  explains why the wrong-date bug reappeared. **Standing lesson: commit real fixes
+  immediately once confirmed working, don't leave them uncommitted mid-session** — a revert
+  should never be able to silently undo a genuine bug fix.
+
+  Attempted to redeploy via `vercel --prod` and hit a real production build failure:
+  `TS1161: Unterminated regular expression literal` inside Next.js's auto-generated
+  `.next/types/validator.ts` (a file built by scanning all route folder names). Also noted a
+  legitimate Turborepo warning: `DATABASE_URL`/`AUTH_SECRET` weren't declared in `turbo.json`'s
+  build task env allowlist — fixed by adding an `"env": [...]` array to the `build` task
+  (unrelated to the build failure itself, but a real, correct fix made regardless).
+
+  Reproduced the build failure locally (`npx next build`) for faster iteration than Vercel's
+  deploy cycle. Investigated the API route folder structure via `find`/`ls` — hit confusing,
+  garbled terminal output on first attempts (turned out to be terminal/paste rendering
+  issues, not real filesystem corruption, ruled out via `pwd` + a clean single-command `ls`).
+  **User found the actual root cause independently**: the `split` folder under
+  `api/bills/[id]/` displayed with a trailing `?` in `ls` output — a strong sign of a hidden/
+  invalid character in the folder name (not visible as plain text), almost certainly
+  introduced by the git revert operation itself mangling a folder name during checkout/merge.
+  Fixed by renaming the folder cleanly. **Confirmed fixed**: `npx next build` now completes
+  successfully with a clean route manifest showing all expected routes, including
+  `/api/bills/[id]/split`. **Lesson: a `?` or unexpected symbol in a file/folder listing is a
+  real signal of a hidden/invalid character, not just a rendering quirk — worth checking
+  directly (rename or recreate) rather than assuming it's cosmetic.**
+
+  **User provided a substantial list of real issues found while testing with actual paycheck/
+  bill data tonight**, to be triaged and addressed: (1) income total inaccurate ($100 entered,
+  $114.10 shown — not yet root-caused, suspect either stray test data or a
+  `normalizeToMonthly()` edge case); (2) Upcoming Pay Periods dates wrong (same bug as the
+  User-table-vs-IncomeSource-table issue found earlier, currently un-fixed again due to the
+  revert); (3) **"Split this bill" doesn't actually affect Remaining/cashflow calculations**
+  — real gap: `calculatePayPeriods()` always uses a bill's full amount regardless of whether
+  split `Payment` records exist for it, so the split action succeeds in the database but the
+  engine doesn't know to use half-amounts afterward — needs real engine work, not a small fix;
+  (4) desire to restructure the dashboard into an information-hub layout with small
+  icon-based action cards (add bill/income, payday calendar, etc.) rather than the current
+  linear card stack — logged as real Phase 6 scope, not attempted tonight; (5) desire for a
+  true budget-tracker checklist view (bills due before next payday, checked off as paid,
+  falling off the list) — good news, `paidThisMonth` tracking already exists from earlier;
+  what's missing is the filtered checklist view itself, and it depends on (3) being fixed
+  first so the underlying data can be trusted. **Plan: fix 1-3 tonight (real correctness
+  issues), log 4-5 as real scoped future work (not attempted tonight, but real and tracked).**
+
 - **Email payment-confirmation scanning** (added 2026-07-19, user idea, researched): opt-in
   feature to search a user's email (via Gmail API OAuth, read-only scope) for payment
   confirmation emails ("thank you for your payment," receipts, etc.) to help auto-detect
