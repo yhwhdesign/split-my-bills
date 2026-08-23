@@ -574,6 +574,21 @@ rules-engine-only output). Session paused here (near usage limit).
   **Confirmed fully fixed and committed** — pay period dates now accurately reflect real
   paycheck timing end to end, input through display.
 
+- **Payday check-in / income reconciliation** (added 2026-07-22, user idea): proactively ask
+  the user "Did you get paid $X on [date]?" once a payday passes, rather than silently
+  trusting the projected monthly income forever. If yes, confirm and advance `nextPayDate`
+  forward (a related gap: `nextPayDate` currently never auto-advances on its own). If no,
+  follow up: new job/changed check amount → offer to add a new income source or edit the
+  existing one; one-off variance (overtime, a bonus, a short week) → a **one-time override**
+  for just that pay period, which does NOT permanently change the baseline amount and reverts
+  to the real number on the next cycle. Mirrors the already-logged "overdue bill
+  reconciliation" backlog idea — same underlying pattern (proactively check assumptions
+  against reality) applied to income instead of bills, suggesting this is becoming a
+  consistent app-wide design principle worth naming. **Needs real schema work**: a
+  `lastConfirmedPayDate` field (or similar) to know when a check-in is due, and a mechanism
+  for the one-time override (a new field or small table) that applies once then expires.
+  Not yet built — scoped for a future session given the schema design deserves focused
+  attention, not a rushed addition late in an already long session.
 - **Email payment-confirmation scanning** (added 2026-07-19, user idea, researched): opt-in
   feature to search a user's email (via Gmail API OAuth, read-only scope) for payment
   confirmation emails ("thank you for your payment," receipts, etc.) to help auto-detect
@@ -588,6 +603,36 @@ rules-engine-only output). Session paused here (near usage limit).
   naturally with the Phase 3 AI layer for extracting amount/date/biller from matched emails
   (same "AI-parsed structured extraction" pattern already planned for statement uploads).
   Not yet built — good candidate for a Phase 4/5-adjacent future phase.
+
+- **2026-07-22 (cont'd, session continues)**: Investigated a suspected income-total bug
+  ($100 test entry showing as $114.10) — ruled out stray/duplicate data via direct `/api/income`
+  inspection, then isolated via a clean single-entry test that the actual math was correct
+  ($100 biweekly correctly normalizes to $216.67/month) once the earlier date fixes were
+  applied; the original $114.10 was very likely a symptom of the now-fixed date bugs, not a
+  separate issue. This surfaced a real UX clarity problem though: the user reasonably expected
+  "Total Income" to show $100 (what was entered), not $216.67 (the monthly-equivalent
+  projection) — both are legitimate ways to read that number, the issue was the label not
+  making the conversion obvious. **Resolved via user's own proposed design**: split the
+  income figure in the dark hero card into two clearly labeled numbers in the same space —
+  "Monthly Income (Projected)" as the primary bold figure, "Per Paycheck (As Entered)" as a
+  smaller supporting figure beneath it. Implemented and confirmed working correctly.
+
+  User proposed a further idea: proactive payday check-ins (see "Payday check-in / income
+  reconciliation" in the backlog above) — recognized as the income-side mirror of the
+  already-logged bill reconciliation idea, suggesting "proactively verify assumptions against
+  reality" is becoming a consistent design pattern for this app. Scoped but not built tonight,
+  given the schema design (new fields for confirmation tracking and one-time overrides)
+  deserves focused attention in its own session rather than being rushed at the end of an
+  already long one.
+
+  **Summary of tonight's session**: found and fixed a genuinely critical production build
+  bug (embedded newline character in a folder name), re-fixed and this time properly
+  committed the pay-period date calculation bug (both the wrong-table-reference issue and
+  two separate timezone bugs, input and display sides), clarified and fixed the Total Income
+  display ambiguity per user's own design, and scoped two real future features (payday
+  check-ins, dashboard-as-hub restructuring) without rushing them. Real, valuable core
+  functionality correctness work — the kind that matters most for an app real people
+  including the user's spouse will actually rely on.
 
 - **2026-07-19 (cont'd, late)**: User identified a real, meaningful flaw: the dashboard's
   "Total Income" and "Remaining" cards were disconnected from the accurate, timing-aware
@@ -681,16 +726,23 @@ finalized when Phase 1 UI work begins.
 ## 7. Current Status
 
 **Phase:** Phase 1 complete. Phase 2 FULLY COMPLETE. Phase 3 FULLY COMPLETE, DEPLOYED, AND
-VERIFIED LIVE. Mobile-responsive functional fixes done. **Phase 6 (Visual Design System &
-Polish) now exists as a real scoped phase** in the roadmap, consolidating previously
-scattered design backlog items. Significant progress made toward it today: light-mode color
-bug fixed (major), off-white background softened, dark hero summary card built (Rocket
-Money-inspired contrast technique), reusable `Logo` component built and used consistently
-across login/signup/dashboard, root URL redirect fixed (was showing a dead test page),
-user's real name now displayed on the dashboard. **All confirmed working locally, not yet
-committed/deployed.**
-**Next: commit and deploy this batch, then continue Phase 6 refinement OR move to Phase 4.**
-**Last updated:** 2026-07-21 (branding + hero card + fixes, pending deploy)
+VERIFIED LIVE. Phase 5 core (PWA installability) complete and verified on real device,
+including a branded install-prompt banner. Phase 6 exists as a real scoped phase, with
+meaningful progress (branding, hero card, color bug fix). **Tonight (2026-07-22): a critical
+production build bug (embedded newline in a folder name) and the core cashflow engine's
+date-calculation bugs (wrong data source + two separate timezone bugs) were found and fixed
+— all confirmed and committed.** Total Income display clarified into two clearly-labeled
+figures (monthly-projected vs. per-paycheck-as-entered) per user's own design. Real bill
+"split" ACTION now creates actual Payment records (built, not yet fully tested — see known
+gap below). **Known real gap, not yet fixed**: `calculatePayPeriods()` doesn't yet check for
+existing split Payment records, so a successfully split bill's full amount still counts
+against Remaining/shortfall calculations — the split succeeds in the database but doesn't yet
+affect the numbers. This is genuine core-function work, not polish, and should be the very
+next priority.
+**Next: fix the split-awareness gap in the cashflow engine (highest priority — core
+correctness), then the dashboard-as-hub restructuring and payday check-in feature (both
+real, scoped, logged in backlog) are natural following steps.**
+**Last updated:** 2026-07-22 (critical bug fixes committed)
 
 ---
 

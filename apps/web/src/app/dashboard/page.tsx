@@ -207,6 +207,9 @@ export default function DashboardPage() {
     (sum, i) => sum + normalizeToMonthly(Number(i.amount), i.frequency as PaySchedule),
     0
   );
+
+  const rawIncomeTotal = income.reduce((sum, i) => sum + Number(i.amount), 0);
+
   const totalBills = bills.reduce((sum, b) => sum + Number(b.amount), 0);
   const currentPeriod = periods.length > 0 ? periods[0] : null;
   const periodRemaining = currentPeriod
@@ -236,8 +239,11 @@ export default function DashboardPage() {
       <div className="rounded-2xl bg-zinc-900 p-6 sm:p-8 shadow-lg">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-4">
           <div>
-            <p className="text-xs uppercase tracking-wide text-zinc-400">Total Income</p>
+            <p className="text-xs uppercase tracking-wide text-zinc-400">Monthly Income ( Projected)</p>
             <p className="text-3xl font-bold text-white mt-1">${totalIncome.toFixed(2)}</p>
+            <p className="text-xs text-zinc-500 mt-2">
+              Per Paycheck (As Entered): <span className="text-zinc-300">${rawIncomeTotal.toFixed(2)}</span>
+            </p>
           </div>
           <div className="sm:border-l sm:border-zinc-700 sm:pl-4">
             <p className="text-xs uppercase tracking-wide text-zinc-400">Total Bills</p>
