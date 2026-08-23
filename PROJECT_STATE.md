@@ -558,6 +558,22 @@ rules-engine-only output). Session paused here (near usage limit).
   first so the underlying data can be trusted. **Plan: fix 1-3 tonight (real correctness
   issues), log 4-5 as real scoped future work (not attempted tonight, but real and tracked).**
 
+- **2026-07-22 (cont'd)**: Re-applied and this time **immediately committed** (per the
+  standing lesson above) the pay-period date fixes. Re-applied `incomeSources[0].frequency`/
+  `.nextPayDate` fix in `/api/split-suggestions/route.ts` — confirmed working, pay periods
+  now calculate from real income data. Re-applied `parseLocalDate()` helper in both
+  `/api/income/route.ts` (POST) and `/api/income/[id]/route.ts` (PATCH), replacing
+  `new Date(dateString)` (which parses as UTC, causing an off-by-one-day bug for users behind
+  UTC) with correct local-date parsing. After re-entering the income source with the fix
+  active, found a **second, separate** timezone bug on the display side: dates were stored
+  correctly but `.toLocaleDateString()` in the dashboard was converting the stored UTC
+  timestamp back through the browser's local timezone for display, shifting it a day
+  backward again — same root cause category, different end of the pipeline. Fixed by adding
+  `{ timeZone: "UTC" }` to all three `.toLocaleDateString()` calls in `dashboard/page.tsx`
+  (pay period dates, the Remaining card's period-end date, and opportunity suggestion dates).
+  **Confirmed fully fixed and committed** — pay period dates now accurately reflect real
+  paycheck timing end to end, input through display.
+
 - **Email payment-confirmation scanning** (added 2026-07-19, user idea, researched): opt-in
   feature to search a user's email (via Gmail API OAuth, read-only scope) for payment
   confirmation emails ("thank you for your payment," receipts, etc.) to help auto-detect
