@@ -66,6 +66,7 @@ type Bill = {
   hasActiveSplit: boolean;
   hasLateSplit: boolean;
   payments: SplitPaymentLeg[];
+  isOverdue: boolean;
 };
 
 export default function DashboardPage() {
@@ -520,6 +521,8 @@ export default function DashboardPage() {
                 <SplitSquareHorizontal size={13} className="text-primary" />
               )}
               {b.hasLateSplit && <AlertTriangle size={13} className="text-yellow-600" />}
+              {b.hasLateSplit && <AlertTriangle size={13} className="text-yellow-600" />}
+              {b.isOverdue && <AlertTriangle size={13} className="text-red-500" />}
             </span>
             <span className="text-xs text-muted-foreground flex items-center gap-1">
               {getCategoryIcon(b.category)}

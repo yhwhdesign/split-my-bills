@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 //import { cookies } from "next/headers";
 import { getCurrentUserId } from "@/lib/session";
 import { createBillSplit } from "@/lib/split-bill";
-import { getCurrentOccurrence } from "@split-my-bills/shared";
+import { getCurrentOccurrence, projectBillDueDates } from "@split-my-bills/shared";
 
 export async function GET() {
   const userId = await getCurrentUserId();
@@ -19,34 +19,38 @@ export async function GET() {
   });
 
   const billsWithStatus = bills.map((b) => {
-    //const [occurrenceDueDate] = projectBillDueDates(b.dueDate);
-    const occurrenceDueDate = getCurrentOccurrence(b.dueDate);
-    const occStart = new Date(
-      occurrenceDueDate.getFullYear(),
-      occurrenceDueDate.getMonth(),
-      occurrenceDueDate.getDate()
-    );
-    const occEnd = new Date(occStart);
-    occEnd.setDate(occEnd.getDate() + 1);
+  const [occurrenceDueDate] = projectBillDueDates(b.dueDate);
+  const occStart = new Date(
+    occurrenceDueDate.getFullYear(),
+    occurrenceDueDate.getMonth(),
+    occurrenceDueDate.getDate()
+  );
+  const occEnd = new Date(occStart);
+  occEnd.setDate(occEnd.getDate() + 1);
 
-    const paidThisMonth = b.payments.some(
-      (p) =>
-        p.status === "PAID" &&
-        !p.isSplitPayment &&
-        p.paidDate &&
-        p.paidDate >= occStart &&
-        p.paidDate < occEnd
-    );
-    const splitPayments = b.payments.filter(
-      (p) => p.isSplitPayment && p.status === "SCHEDULED"
-    );
-    return {
-      ...b,
-      paidThisMonth,
-      hasActiveSplit: splitPayments.length > 0,
-      hasLateSplit: splitPayments.some((p) => p.isLate),
-    };
-  });
+  const paidThisMonth = b.payments.some(
+    (p) =>
+      p.status === "PAID" &&
+      !p.isSplitPayment &&
+      p.paidDate &&
+      p.paidDate >= occStart &&
+      p.paidDate < occEnd
+  );
+
+  const currentOccurrence = getCurrentOccurrence(b.dueDate);
+  const isOverdue = !paidThisMonth && currentOccurrence < new Date();
+
+  const splitPayments = b.payments.filter(
+    (p) => p.isSplitPayment && p.status === "SCHEDULED"
+  );
+  return {
+    ...b,
+    paidThisMonth,
+    isOverdue,
+    hasActiveSplit: splitPayments.length > 0,
+    hasLateSplit: splitPayments.some((p) => p.isLate),
+  };
+});
 
   return NextResponse.json(billsWithStatus);
 }
