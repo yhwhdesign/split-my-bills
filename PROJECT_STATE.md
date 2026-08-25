@@ -517,3 +517,45 @@ from the most recent sessions below.)*
   data is often what surfaces it.** Both split-date bugs were only caught once tested against
   real bills with real due dates and real pay history — synthetic/quick test cases can pass
   while still encoding the wrong rule.
+
+---
+
+## Addendum — 2026-08-24, end of session (overdue-bill indicator shipped)
+
+**Shipped tonight, after the merge:** an overdue-bill visual indicator, built and confirmed
+working against a real bill (mortgage due the 1st, tested on 8/24 — correctly showed the red
+overdue icon for the unpaid August occurrence).
+
+- `GET /api/bills/route.ts`: added a computed `isOverdue` field per bill — `true` when
+  `getCurrentOccurrence(bill.dueDate) < today` and the bill isn't already `paidThisMonth`.
+  Reuses the same occurrence-based pattern already established for `paidThisMonth`.
+- `dashboard/page.tsx`: added `isOverdue: boolean` to the `Bill` type; renders a red
+  `AlertTriangle` icon next to the bill name when `isOverdue` is true, distinct from the
+  existing yellow `AlertTriangle` used for `hasLateSplit`.
+- Committed to `dev` and pushed. DB wiped again afterward (Payment/Bill/IncomeSource, via
+  Neon's SQL editor) to leave production clean for next session.
+
+**This closes out the "Overdue-bill visual indicator" backlog item** from Section 6 / Known
+Gaps — remove it from the open list; it's done.
+
+**Confirmed, real next-session priority: recurring splits.** This is the single most important
+functional gap left — a splittable bill like "CashApp - Groceries + Gas" only ever gets ONE
+pair of split `Payment` rows, ever; nothing regenerates a new pair for the next pay cycle.
+This needs to be built as its own focused session, not squeezed in. Rough shape already agreed:
+
+1. Every split bill should behave like an unsplit bill's due date does — automatically
+   "reappearing" every cycle with no manual action, via a lazy check (likely at the top of
+   `GET /api/split-suggestions`): does this bill have a scheduled/paid pair covering the
+   current cycle? If not, generate the next pair.
+2. Open design question, not yet decided: does every splittable bill recur automatically by
+   default (simplest — no schema change), or does the app need an explicit `splitMode` /
+   "one-time vs. recurring" choice on the bill? Discussion leaned toward: probably no user
+   ever wants a one-time-only split that stops recurring, so recurring-by-default for any
+   `splittable` bill is likely the right call — worth confirming with the user first thing next
+   session before writing code, rather than assuming.
+3. A related, separate open question already logged: due-date-driven splits (fund one due
+   date via the two most recent paydays before it — the student loan pattern) vs.
+   payday-driven splits with no due-date tie-in at all (the groceries/gas pattern). Both need
+   to keep recurring; the question is only which two paydays get picked each cycle.
+
+**Last updated:** 2026-08-24 (end of session)
