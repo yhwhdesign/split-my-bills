@@ -1,5 +1,7 @@
 "use client";
 
+import { DayOfMonthPicker } from "@/components/day-of-month-picker";
+import { SplitSquareHorizontal, AlertTriangle } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { normalizeToMonthly, type PaySchedule } from "@split-my-bills/shared";
@@ -24,7 +26,7 @@ import {
   Zap,
   Wifi,
   Car,
-  ShoppingCart,
+  //ShoppingCart,
   HeartPulse,
   Tag,
   Droplet,
@@ -45,6 +47,14 @@ type IncomeSource = {
   nextPayDate: string;
 };
 
+type SplitPaymentLeg = {
+  id: string;
+  amount: string;
+  paidDate: string;
+  status: string;
+  isSplitPayment: boolean;
+}
+
 type Bill = {
   id: string;
   name: string;
@@ -53,6 +63,9 @@ type Bill = {
   category: string | null;
   splittable: boolean;
   paidThisMonth: boolean;
+  hasActiveSplit: boolean;
+  hasLateSplit: boolean;
+  payments: SplitPaymentLeg[];
 };
 
 export default function DashboardPage() {
@@ -188,20 +201,17 @@ export default function DashboardPage() {
     loadData();
   }
 
-  async function handleSplitBill(billId: string, periodStart: string) {
-    const firstDate = new Date().toISOString();
-    const secondDate = new Date(periodStart);
-    secondDate.setMonth(secondDate.getMonth() + 1); // rough placeholder — refine later
-    await fetch(`/api/bills/${billId}/split`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        firstDate,
-        secondDate: secondDate.toISOString(),
-      }),
-    });
-    loadData();
-  }
+  async function handleToggleSplitPaymentPaid(paymentId: string, currentlyPaid: boolean) {
+  await fetch(`/api/payments/${paymentId}/pay`, {
+    method: currentlyPaid ? "DELETE" : "POST",
+  });
+  loadData();
+}
+
+  async function handleSplitBill(billId: string) {
+  await fetch(`/api/bills/${billId}/split`, { method: "POST" });
+  loadData();
+}
 
   const totalIncome = income.reduce(
     (sum, i) => sum + normalizeToMonthly(Number(i.amount), i.frequency as PaySchedule),
@@ -387,7 +397,7 @@ export default function DashboardPage() {
                 <Button
                   size="sm"
                   className="mt-2 font-semibold"
-                  onClick={() => handleSplitBill(s.billId, s.periodStart)}
+                  onClick={() => handleSplitBill(s.billId)}
                 >
                   Split this bill
                 </Button>
@@ -481,60 +491,100 @@ export default function DashboardPage() {
             <CardTitle>Bills</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {bills.map((b) => (
-              <div key={b.id} className="flex items-start justify-between gap-2 text-sm border-b pb-2">
-                <div className="flex items-center gap-2 min-w-0 flex-1">
-                  <button onClick={() => handleTogglePaid(b.id, b.paidThisMonth)}>
-                    {b.paidThisMonth ? (
-                      <CheckCircle2 size={16} className="text-primary" />
+            {bills.map((b) => {
+  const splitLegs = b.payments.filter((p) => p.isSplitPayment);
+
+  return (
+    <div key={b.id} className="border-b pb-2">
+      <div className="flex items-start justify-between gap-2 text-sm">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          {b.hasActiveSplit ? (
+            <SplitSquareHorizontal size={16} className="text-primary shrink-0" />
+          ) : (
+            <button onClick={() => handleTogglePaid(b.id, b.paidThisMonth)}>
+              {b.paidThisMonth ? (
+                <CheckCircle2 size={16} className="text-primary" />
+              ) : (
+                <Circle size={16} className="text-muted-foreground/40" />
+              )}
+            </button>
+          )}
+          <div className="flex flex-col min-w-0">
+            <span
+              className={`font-medium flex items-center gap-1.5 ${
+                b.paidThisMonth ? "text-muted-foreground line-through" : ""
+              }`}
+            >
+              {b.name}
+              {b.hasActiveSplit && (
+                <SplitSquareHorizontal size={13} className="text-primary" />
+              )}
+              {b.hasLateSplit && <AlertTriangle size={13} className="text-yellow-600" />}
+            </span>
+            <span className="text-xs text-muted-foreground flex items-center gap-1">
+              {getCategoryIcon(b.category)}
+              Due {b.dueDate}
+              {b.category && ` · ${b.category}`}
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {editingBillId === b.id ? (
+            <EditAmountForm
+              initialValue={b.amount}
+              onSave={(val) => handleUpdateBill(b.id, val)}
+              onCancel={() => setEditingBillId(null)}
+            />
+          ) : (
+            <>
+              <span className="font-semibold min-w-[70px] text-right inline-block">
+                ${Number(b.amount).toFixed(2)}
+              </span>
+              <button
+                onClick={() => setEditingBillId(b.id)}
+                className="text-muted-foreground/50 hover:text-primary transition-colors"
+              >
+                <Pencil size={14} />
+              </button>
+              <button
+                onClick={() => handleDeleteBill(b.id)}
+                className="text-muted-foreground/50 hover:text-destructive transition-colors"
+              >
+                <Trash2 size={14} />
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {b.hasActiveSplit && splitLegs.length > 0 && (
+        <div className="ml-6 mt-1.5 space-y-1">
+          {splitLegs.map((leg) => {
+            const legPaid = leg.status === "PAID";
+            return (
+              <div key={leg.id} className="flex items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <button onClick={() => handleToggleSplitPaymentPaid(leg.id, legPaid)}>
+                    {legPaid ? (
+                      <CheckCircle2 size={14} className="text-primary" />
                     ) : (
-                      <Circle size={16} className="text-muted-foreground/40" />
+                      <Circle size={14} className="text-muted-foreground/40" />
                     )}
                   </button>
-                  <div className="flex flex-col min-w-0">
-                    <span
-                      className={`font-medium ${
-                        b.paidThisMonth ? "text-muted-foreground line-through" : ""
-                      }`}
-                    >
-                      {b.name}
-                    </span>
-                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                      {getCategoryIcon(b.category)}
-                      Due {b.dueDate}
-                      {b.category && ` · ${b.category}`}
-                    </span>
-                  </div>
+                  <span className={legPaid ? "text-muted-foreground line-through" : "text-muted-foreground"}>
+                    {leg.paidDate &&
+                      new Date(leg.paidDate).toLocaleDateString(undefined, { timeZone: "UTC" })}
+                  </span>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {editingBillId === b.id ? (
-                    <EditAmountForm
-                      initialValue={b.amount}
-                      onSave={(val) => handleUpdateBill(b.id, val)}
-                      onCancel={() => setEditingBillId(null)}
-                    />
-                  ) : (
-                    <>
-                      <span className="font-semibold min-w-[70px] text-right inline-block">
-                        ${Number(b.amount).toFixed(2)}
-                      </span>
-                      <button
-                        onClick={() => setEditingBillId(b.id)}
-                        className="text-muted-foreground/50 hover:text-primary transition-colors"
-                      >
-                        <Pencil size={14} />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteBill(b.id)}
-                        className="text-muted-foreground/50 hover:text-destructive transition-colors"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </>
-                  )}
-                </div>
+                <span className="font-medium">${Number(leg.amount).toFixed(2)}</span>
               </div>
-            ))}
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+})}
             <form onSubmit={handleAddBill} className="space-y-2 pt-2">
               <Input
                 name="name"
@@ -551,14 +601,10 @@ export default function DashboardPage() {
                 }}
               />
               <Input name="amount" type="number" step="0.01" placeholder="Amount" required />
-              <Input
-                name="dueDate"
-                type="number"
-                min="1"
-                max="31"
-                placeholder="Day of month due"
-                required
-              />
+              <div>
+                <Label className="text-xs text-muted-foreground">Due date</Label>
+                <DayOfMonthPicker name="dueDate" />
+              </div>
               <Input
                 name="category"
                 placeholder="Category (auto-suggested as you type)"
