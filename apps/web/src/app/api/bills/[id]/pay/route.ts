@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/session";
+import { getCurrentOccurrence } from "@split-my-bills/shared";
+
+function startOfDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+function endOfDay(date: Date) {
+  const d = startOfDay(date);
+  d.setDate(d.getDate() + 1);
+  return d;
+}
 
 export async function POST(
   request: NextRequest,
@@ -15,12 +25,16 @@ export async function POST(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  //const [occurrenceDueDate] = projectBillDueDates(bill.dueDate);
+  const occurrenceDueDate = getCurrentOccurrence(bill.dueDate);
+
   const payment = await prisma.payment.create({
     data: {
       billId,
       amount: bill.amount,
-      paidDate: new Date(),
+      paidDate: occurrenceDueDate,
       status: "PAID",
+      isSplitPayment: false,
     },
   });
 
@@ -40,12 +54,19 @@ export async function DELETE(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  // Find and remove the most recent unpaid-back "PAID" record for this bill this month
-  const now = new Date();
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  //const [occurrenceDueDate] = projectBillDueDates(bill.dueDate);
+  const occurrenceDueDate = getCurrentOccurrence(bill.dueDate);
 
   const recentPayment = await prisma.payment.findFirst({
-    where: { billId, status: "PAID", paidDate: { gte: startOfMonth } },
+    where: {
+      billId,
+      status: "PAID",
+      isSplitPayment: false,
+      paidDate: {
+        gte: startOfDay(occurrenceDueDate),
+        lt: endOfDay(occurrenceDueDate),
+      },
+    },
     orderBy: { paidDate: "desc" },
   });
 

@@ -1,8 +1,10 @@
 "use client";
 
-import { normalizeToMonthly, type PaySchedule } from "@split-my-bills/shared";
+import { DayOfMonthPicker } from "@/components/day-of-month-picker";
+import { SplitSquareHorizontal, AlertTriangle } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { normalizeToMonthly, type PaySchedule } from "@split-my-bills/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,8 +15,26 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Pencil, Trash2, Check, X, CheckCircle2, Circle } from "lucide-react";
-import { Home, Zap, Wifi, Car, ShoppingCart, HeartPulse, Tag } from "lucide-react";
+import {
+  Pencil,
+  Trash2,
+  Check,
+  X,
+  CheckCircle2,
+  Circle,
+  Home,
+  Zap,
+  Wifi,
+  Car,
+  //ShoppingCart,
+  HeartPulse,
+  Tag,
+  Droplet,
+  Flame,
+  Phone,
+  Tv,
+  CreditCard,
+} from "lucide-react";
 import { Logo } from "@/components/logo";
 import { InstallPrompt } from "@/components/install-prompt";
 
@@ -26,6 +46,14 @@ type IncomeSource = {
   nextPayDate: string;
 };
 
+type SplitPaymentLeg = {
+  id: string;
+  amount: string;
+  paidDate: string;
+  status: string;
+  isSplitPayment: boolean;
+};
+
 type Bill = {
   id: string;
   name: string;
@@ -34,6 +62,9 @@ type Bill = {
   category: string | null;
   splittable: boolean;
   paidThisMonth: boolean;
+  hasActiveSplit: boolean;
+  hasLateSplit: boolean;
+  payments: SplitPaymentLeg[];
 };
 
 export default function DashboardPage() {
@@ -41,53 +72,53 @@ export default function DashboardPage() {
   const [income, setIncome] = useState<IncomeSource[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
   const [periods, setPeriods] = useState<any[]>([]);
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [opportunities, setOpportunities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingIncomeId, setEditingIncomeId] = useState<string | null>(null);
   const [editingBillId, setEditingBillId] = useState<string | null>(null);
   const [expandedPeriod, setExpandedPeriod] = useState<number | null>(null);
-  const [opportunities, setOpportunities] = useState<any[]>([]);
   const [coaching, setCoaching] = useState<string | null>(null);
   const [coachingLoading, setCoachingLoading] = useState(false);
   const [limitReached, setLimitReached] = useState(false);
   const [userName, setUserName] = useState<string | null>(null);
 
-
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (!loading) {
+      loadCoaching();
+    }
+  }, [loading]);
 
   async function loadData() {
     const [incomeRes, billsRes, periodsRes, userRes] = await Promise.all([
       fetch("/api/income"),
       fetch("/api/bills"),
       fetch("/api/split-suggestions"),
-      fetch("/api/user/me"), // Fetch user info
+      fetch("/api/user/me"),
     ]);
     setIncome(await incomeRes.json());
     setBills(await billsRes.json());
-   const periodsData = await periodsRes.json();
+    const periodsData = await periodsRes.json();
     setPeriods(periodsData.periods ?? []);
     setSuggestions(periodsData.suggestions ?? []);
     setOpportunities(periodsData.opportunities ?? []);
     const userData = await userRes.json();
-    setUserName(userData.name ?? null); // Set user name
+    setUserName(userData.name ?? null);
     setLoading(false);
   }
 
-  useEffect(() => {
-  if (!loading) {
-    loadCoaching();
+  async function loadCoaching() {
+    setCoachingLoading(true);
+    const res = await fetch("/api/ai-coaching");
+    const data = await res.json();
+    setCoaching(data.coaching);
+    setLimitReached(!!data.limitReached);
+    setCoachingLoading(false);
   }
-}, [loading]);
-
-async function loadCoaching() {
-  setCoachingLoading(true);
-  const res = await fetch("/api/ai-coaching");
-  const data = await res.json();
-  setCoaching(data.coaching);
-  setLimitReached(!!data.limitReached);
-  setCoachingLoading(false);
-}
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -169,15 +200,30 @@ async function loadCoaching() {
     loadData();
   }
 
+  async function handleToggleSplitPaymentPaid(paymentId: string, currentlyPaid: boolean) {
+    await fetch(`/api/payments/${paymentId}/pay`, {
+      method: currentlyPaid ? "DELETE" : "POST",
+    });
+    loadData();
+  }
+
+  async function handleSplitBill(billId: string) {
+    await fetch(`/api/bills/${billId}/split`, { method: "POST" });
+    loadData();
+  }
+
   const totalIncome = income.reduce(
     (sum, i) => sum + normalizeToMonthly(Number(i.amount), i.frequency as PaySchedule),
-  0
+    0
   );
+
+  const rawIncomeTotal = income.reduce((sum, i) => sum + Number(i.amount), 0);
+
   const totalBills = bills.reduce((sum, b) => sum + Number(b.amount), 0);
   const currentPeriod = periods.length > 0 ? periods[0] : null;
-  const periodRemaining = currentPeriod ? currentPeriod.income - currentPeriod.totalBillAmount : totalIncome - totalBills;
-  const [suggestions, setSuggestions] = useState<any[]>([]);
-
+  const periodRemaining = currentPeriod
+    ? currentPeriod.income - currentPeriod.totalBillAmount
+    : totalIncome - totalBills;
 
   if (loading) {
     return <main className="p-8">Loading...</main>;
@@ -187,12 +233,10 @@ async function loadCoaching() {
     <main className="mx-auto max-w-4xl p-4 sm:p-8 space-y-6 sm:space-y-8">
       <div className="flex items-center justify-between border-b pb-4">
         <div>
-          <div>
-            <Logo />
-            <p className="text-sm text-muted-foreground mt-1">
-              {userName ? `Welcome back, ${userName}` : "Here's where things stand today"}
-            </p>
-          </div>
+          <Logo />
+          <p className="text-sm text-muted-foreground mt-1">
+            {userName ? `Welcome back, ${userName}` : "Here's where things stand today"}
+          </p>
         </div>
         <Button variant="outline" onClick={handleLogout} className="shrink-0">
           Log out
@@ -201,12 +245,14 @@ async function loadCoaching() {
 
       <InstallPrompt />
 
-      
       <div className="rounded-2xl bg-zinc-900 p-6 sm:p-8 shadow-lg">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-4">
           <div>
-            <p className="text-xs uppercase tracking-wide text-zinc-400">Total Income</p>
+            <p className="text-xs uppercase tracking-wide text-zinc-400">Monthly Income ( Projected)</p>
             <p className="text-3xl font-bold text-white mt-1">${totalIncome.toFixed(2)}</p>
+            <p className="text-xs text-zinc-500 mt-2">
+              Per Paycheck (As Entered): <span className="text-zinc-300">${rawIncomeTotal.toFixed(2)}</span>
+            </p>
           </div>
           <div className="sm:border-l sm:border-zinc-700 sm:pl-4">
             <p className="text-xs uppercase tracking-wide text-zinc-400">Total Bills</p>
@@ -215,7 +261,7 @@ async function loadCoaching() {
           <div className="sm:border-l sm:border-zinc-700 sm:pl-4">
             <p className="text-xs uppercase tracking-wide text-zinc-400">
               {currentPeriod
-                ? `Remaining (thru ${new Date(currentPeriod.end).toLocaleDateString()})`
+                ? `Remaining (thru ${new Date(currentPeriod.end).toLocaleDateString(undefined, { timeZone: "UTC"})})`
                 : "Remaining"}
             </p>
             <p
@@ -255,19 +301,19 @@ async function loadCoaching() {
           <CardTitle>Your AI Coach</CardTitle>
         </CardHeader>
         <CardContent>
-        {coachingLoading ? (
-          <p className="text-muted-foreground text-sm">Thinking...</p>
-        ) : limitReached ? (
-          <p className="text-muted-foreground text-sm">
-            AI suggestions have reached today's limit — your bills and split suggestions above are
-            still fully accurate. Check back tomorrow for AI coaching.
-          </p>
-        ) : coaching ? (
-          <p className="text-sm whitespace-pre-wrap">{coaching}</p>
-        ) : (
-          <p className="text-muted-foreground text-sm">No suggestions available right now.</p>
-        )}
-      </CardContent>
+          {coachingLoading ? (
+            <p className="text-muted-foreground text-sm">Thinking...</p>
+          ) : limitReached ? (
+            <p className="text-muted-foreground text-sm">
+              AI suggestions have reached today&apos;s limit — your bills and split suggestions
+              above are still fully accurate. Check back tomorrow for AI coaching.
+            </p>
+          ) : coaching ? (
+            <p className="text-sm whitespace-pre-wrap">{coaching}</p>
+          ) : (
+            <p className="text-muted-foreground text-sm">No suggestions available right now.</p>
+          )}
+        </CardContent>
       </Card>
 
       {periods.length > 0 && (
@@ -290,7 +336,7 @@ async function loadCoaching() {
                 >
                   <div>
                     <div className="font-medium">
-                      {new Date(p.payDate).toLocaleDateString()}
+                      {new Date(p.payDate).toLocaleDateString(undefined, { timeZone: "UTC"})}
                       {p.isThreePaycheckMonth && (
                         <span className="ml-2 text-xs text-primary">3-paycheck month</span>
                       )}
@@ -314,10 +360,7 @@ async function loadCoaching() {
                 {expandedPeriod === idx && p.bills.length > 0 && (
                   <div className="border-t px-3 py-2 space-y-1">
                     {p.bills.map((item: any, i: number) => (
-                      <div
-                        key={i}
-                        className="flex justify-between text-xs text-muted-foreground"
-                      >
+                      <div key={i} className="flex justify-between text-xs text-muted-foreground">
                         <span className="font-medium">{item.bill.name}</span>
                         <span className="font-semibold">${item.bill.amount.toFixed(2)}</span>
                       </div>
@@ -350,6 +393,30 @@ async function loadCoaching() {
                   </span>
                 </div>
                 <p className="text-muted-foreground text-xs mt-1">{s.reasoning}</p>
+                <Button
+                  size="sm"
+                  className="mt-2 font-semibold"
+                  onClick={() => handleSplitBill(s.billId)}
+                >
+                  Split this bill
+                </Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {opportunities.length > 0 && (
+        <Card className="border-primary/30 bg-primary/5 shadow-sm py-6">
+          <CardHeader>
+            <CardTitle>Extra Paycheck Opportunities</CardTitle>
+            <CardDescription>Months with a 3rd paycheck — good chances to get ahead</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {opportunities.map((o, idx) => (
+              <div key={idx} className="rounded-md border border-primary/20 bg-background p-3 text-sm">
+                <div className="font-medium">{new Date(o.payDate).toLocaleDateString(undefined, { timeZone: "UTC"})}</div>
+                <p className="text-muted-foreground text-xs mt-1">{o.reasoning}</p>
               </div>
             ))}
           </CardContent>
@@ -374,7 +441,9 @@ async function loadCoaching() {
                     />
                   ) : (
                     <>
-                      <span className="font-semibold min-w-[70px] text-right inline-block">${Number(i.amount).toFixed(2)}</span>
+                      <span className="font-semibold min-w-[70px] text-right inline-block">
+                        ${Number(i.amount).toFixed(2)}
+                      </span>
                       <button
                         onClick={() => setEditingIncomeId(i.id)}
                         className="text-muted-foreground/50 hover:text-primary transition-colors"
@@ -421,68 +490,114 @@ async function loadCoaching() {
             <CardTitle>Bills</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {bills.map((b) => (
-              <div key={b.id} className="flex items-start justify-between gap-2 text-sm border-b pb-2">
-                <div className="flex items-center gap-2 min-w-0 flex-1">
-                  <button onClick={() => handleTogglePaid(b.id, b.paidThisMonth)}>
-                    {b.paidThisMonth ? (
-                      <CheckCircle2 size={16} className="text-primary" />
-                    ) : (
-                      <Circle size={16} className="text-muted-foreground/40" />
-                    )}
-                  </button>
-                  <div className="flex flex-col min-w-0">
-                    <span className={b.paidThisMonth ? "text-muted-foreground line-through" : ""}>
-                      {b.name}
-                    </span>
-                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                      {getCategoryIcon(b.category)}
-                        Due {b.dueDate}
-                        {b.category && ` · ${b.category}`}
-                    </span>
+            {bills.map((b) => {
+              const splitLegs = b.payments.filter((p) => p.isSplitPayment);
+
+              return (
+                <div key={b.id} className="border-b pb-2">
+                  <div className="flex items-start justify-between gap-2 text-sm">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      {b.hasActiveSplit ? (
+                        <SplitSquareHorizontal size={16} className="text-primary shrink-0" />
+                      ) : (
+                        <button onClick={() => handleTogglePaid(b.id, b.paidThisMonth)}>
+                          {b.paidThisMonth ? (
+                            <CheckCircle2 size={16} className="text-primary" />
+                          ) : (
+                            <Circle size={16} className="text-muted-foreground/40" />
+                          )}
+                        </button>
+                      )}
+                      <div className="flex flex-col min-w-0">
+                        <span
+                          className={`font-medium flex items-center gap-1.5 ${
+                            b.paidThisMonth ? "text-muted-foreground line-through" : ""
+                          }`}
+                        >
+                          {b.name}
+                          {b.hasActiveSplit && (
+                            <SplitSquareHorizontal size={13} className="text-primary" />
+                          )}
+                          {b.hasLateSplit && <AlertTriangle size={13} className="text-yellow-600" />}
+                        </span>
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          {getCategoryIcon(b.category)}
+                          Due {b.dueDate}
+                          {b.category && ` · ${b.category}`}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {editingBillId === b.id ? (
+                        <EditAmountForm
+                          initialValue={b.amount}
+                          onSave={(val) => handleUpdateBill(b.id, val)}
+                          onCancel={() => setEditingBillId(null)}
+                        />
+                      ) : (
+                        <>
+                          <span className="font-semibold min-w-[70px] text-right inline-block">
+                            ${Number(b.amount).toFixed(2)}
+                          </span>
+                          <button
+                            onClick={() => setEditingBillId(b.id)}
+                            className="text-muted-foreground/50 hover:text-primary transition-colors"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteBill(b.id)}
+                            className="text-muted-foreground/50 hover:text-destructive transition-colors"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {editingBillId === b.id ? (
-                    <EditAmountForm
-                      initialValue={b.amount}
-                      onSave={(val) => handleUpdateBill(b.id, val)}
-                      onCancel={() => setEditingBillId(null)}
-                    />
-                  ) : (
-                    <>
-                      <span className="font-semibold min-w-[70px] text-right inline-block">
-                        ${Number(b.amount).toFixed(2)}
-                      </span>
-                      <button
-                        onClick={() => setEditingBillId(b.id)}
-                        className="text-muted-foreground/50 hover:text-primary transition-colors"
-                      >
-                        <Pencil size={14} />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteBill(b.id)}
-                        className="text-muted-foreground/50 hover:text-destructive transition-colors"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </>
+
+                  {b.hasActiveSplit && splitLegs.length > 0 && (
+                    <div className="ml-6 mt-1.5 space-y-1">
+                      {splitLegs.map((leg) => {
+                        const legPaid = leg.status === "PAID";
+                        return (
+                          <div key={leg.id} className="flex items-center justify-between gap-2 text-xs">
+                            <div className="flex items-center gap-2">
+                              <button onClick={() => handleToggleSplitPaymentPaid(leg.id, legPaid)}>
+                                {legPaid ? (
+                                  <CheckCircle2 size={14} className="text-primary" />
+                                ) : (
+                                  <Circle size={14} className="text-muted-foreground/40" />
+                                )}
+                              </button>
+                              <span className={legPaid ? "text-muted-foreground line-through" : "text-muted-foreground"}>
+                                {leg.paidDate &&
+                                  new Date(leg.paidDate).toLocaleDateString(undefined, { timeZone: "UTC" })}
+                              </span>
+                            </div>
+                            <span className="font-medium">${Number(leg.amount).toFixed(2)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
             <form onSubmit={handleAddBill} className="space-y-2 pt-2">
               <Input name="name" placeholder="Bill name" required />
               <Input name="amount" type="number" step="0.01" placeholder="Amount" required />
+              <div>
+                <Label className="text-xs text-muted-foreground">Due date</Label>
+                <DayOfMonthPicker name="dueDate" />
+              </div>
               <Input
-                name="dueDate"
-                type="number"
-                min="1"
-                max="31"
-                placeholder="Day of month due"
-                required
+                name="category"
+                placeholder="Category (optional)"
+                onChange={(e) => {
+                  e.currentTarget.dataset.userEdited = "true";
+                }}
               />
-              <Input name="category" placeholder="Category (optional)" />
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" name="splittable" />
                 Splittable into two payments
@@ -493,23 +608,6 @@ async function loadCoaching() {
             </form>
           </CardContent>
         </Card>
-
-        {opportunities.length > 0 && (
-          <Card className="border-primary/30 bg-primary/5 shadow-sm py-6">
-            <CardHeader>
-              <CardTitle>Extra Paycheck Opportunities</CardTitle>
-              <CardDescription>Months with a 3rd paycheck — good chances to get ahead</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {opportunities.map((o, idx) => (
-                <div key={idx} className="rounded-md border border-primary/20 bg-background p-3 text-sm">
-                  <div className="font-medium">{new Date(o.payDate).toLocaleDateString()}</div>
-                  <p className="text-muted-foreground text-xs mt-1">{o.reasoning}</p>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        )}
       </div>
     </main>
   );
@@ -549,11 +647,16 @@ function EditAmountForm({
 function getCategoryIcon(category: string | null) {
   const map: Record<string, typeof Tag> = {
     housing: Home,
-    utilities: Zap,
+    "car loan": Car,
+    "car insurance": Car,
+    electric: Zap,
+    water: Droplet,
+    gas: Flame,
     internet: Wifi,
-    transportation: Car,
-    groceries: ShoppingCart,
-    health: HeartPulse,
+    phone: Phone,
+    subscription: Tv,
+    "health/medical": HeartPulse,
+    "credit card": CreditCard,
   };
   const Icon = category ? map[category.toLowerCase()] ?? Tag : Tag;
   return <Icon size={14} className="text-muted-foreground/60" />;

@@ -17,7 +17,8 @@ export function isCashflowRisk(bill: Bill, availableIncome: number): boolean {
 export function getUpcomingPayDates(
   paySchedule: PaySchedule,
   anchorDate: Date,
-  windowDays: number = 60
+  windowDays: number = 60,
+  includeMostRecentPast: boolean = false
 ): Date[] {
   const payDates: Date[] = [];
   const today = new Date();
@@ -25,13 +26,17 @@ export function getUpcomingPayDates(
   endWindow.setDate(endWindow.getDate() + windowDays);
 
   let current = new Date(anchorDate);
+  let lastBeforeToday: Date | null = null;
 
-  // Fast-forward the anchor date up to "today" based on the schedule's interval
   while (current < today) {
+    lastBeforeToday = new Date(current);
     current = advancePayDate(current, paySchedule);
   }
 
-  // Collect every pay date that falls within our window
+  if (includeMostRecentPast && lastBeforeToday) {
+    payDates.push(lastBeforeToday);
+  }
+
   while (current <= endWindow) {
     payDates.push(new Date(current));
     current = advancePayDate(current, paySchedule);
@@ -120,40 +125,80 @@ export interface PayPeriod {
   shortfall: number;
 }
 
+export interface SplitPaymentOverride {
+  billId: string;
+  billName: string;
+  payments: { date: Date; amount: number }[];
+}
+
 export function calculatePayPeriods(
   incomeAmount: number,
   paySchedule: PaySchedule,
   anchorDate: Date,
   bills: Bill[],
-  windowDays: number = 60
+  windowDays: number = 60,
+  splitOverrides: SplitPaymentOverride[] = [],
+  paidOccurrences: PaidOccurrence[] = []
 ): PayPeriod[] {
-  const payDates = getUpcomingPayDates(paySchedule, anchorDate, windowDays);
+  const payDates = getUpcomingPayDates(paySchedule, anchorDate, windowDays, true);
   const monthGroups = groupPayDatesByMonth(payDates);
 
-  // Map each pay date to whether its month has 3 paychecks
   const threePaycheckMonthKeys = new Set(
     monthGroups.filter((g) => g.isThreePaycheckMonth).map((g) => g.month)
   );
 
-  // Pre-compute real due dates for every bill in the window
-  const billDueDates = bills.map((bill) => ({
-    bill,
-    dates: projectBillDueDates(bill.dueDate, windowDays),
-  }));
+  const overriddenBillIds = new Set(splitOverrides.map((o) => o.billId));
+
+  const isPaidOccurrence = (billId: string, date: Date) =>
+    paidOccurrences.some(
+      (p) =>
+        p.billId === billId &&
+        p.date.getFullYear() === date.getFullYear() &&
+        p.date.getMonth() === date.getMonth() &&
+        p.date.getDate() === date.getDate()
+    );
+
+  const billDueDates = bills
+    .filter((bill) => !overriddenBillIds.has(bill.id))
+    .map((bill) => ({
+      bill,
+      dates: projectBillDueDates(bill.dueDate, windowDays),
+    }));
 
   const periods: PayPeriod[] = [];
 
   for (let i = 0; i < payDates.length; i++) {
     const start = payDates[i];
-    const end = i + 1 < payDates.length ? payDates[i + 1] : new Date(start.getTime() + 1000 * 60 * 60 * 24 * 30);
+    const end =
+      i + 1 < payDates.length
+        ? payDates[i + 1]
+        : new Date(start.getTime() + 1000 * 60 * 60 * 24 * 30);
 
     const monthKey = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}`;
 
     const billsInPeriod: { bill: Bill; dueDate: Date }[] = [];
+
     for (const { bill, dates } of billDueDates) {
       for (const d of dates) {
-        if (d >= start && d < end) {
+        if (d >= start && d < end && !isPaidOccurrence(bill.id, d)) {
           billsInPeriod.push({ bill, dueDate: d });
+        }
+      }
+    }
+
+    for (const override of splitOverrides) {
+      for (const payment of override.payments) {
+        if (payment.date >= start && payment.date < end) {
+          billsInPeriod.push({
+            bill: {
+              id: override.billId,
+              name: `${override.billName} (split payment)`,
+              amount: payment.amount,
+              dueDate: payment.date.getDate(),
+              splittable: false,
+            },
+            dueDate: payment.date,
+          });
         }
       }
     }
@@ -175,6 +220,11 @@ export function calculatePayPeriods(
   }
 
   return periods;
+}
+
+export interface PaidOccurrence {
+  billId: string;
+  date: Date;
 }
 
 export function normalizeToMonthly(amount: number, frequency: PaySchedule): number {
@@ -281,4 +331,52 @@ export function generateOpportunitySuggestions(periods: PayPeriod[]): Opportunit
   }
 
   return suggestions;
+}
+
+export interface SplitPaymentPlan {
+  date: Date;
+  amount: number;
+  isLate: boolean;
+}
+
+export interface SplitPlan {
+  firstPayment: SplitPaymentPlan;
+  secondPayment: SplitPaymentPlan;
+}
+
+export function planBillSplit(
+  bill: Bill,
+  paySchedule: PaySchedule,
+  anchorDate: Date,
+  windowDays: number = 90
+): SplitPlan {
+  const dueDates = projectBillDueDates(bill.dueDate, windowDays);
+  const dueDate = dueDates[0]; // next unpaid occurrence — same source of truth as before
+
+  // Look far enough back to have a real shot at finding two paydays before the due date,
+  // even for a due date early in the month.
+  const lookbackStart = new Date(dueDate);
+  lookbackStart.setDate(lookbackStart.getDate() - 45);
+
+  const payDates = getUpcomingPayDates(paySchedule, lookbackStart, windowDays + 45, true);
+
+  const paydaysBeforeDue = payDates.filter((d) => d <= dueDate);
+  const chosenDates = paydaysBeforeDue.slice(-2); // the two most recent, in order
+
+  const half = bill.amount / 2;
+  const makePayment = (date: Date): SplitPaymentPlan => ({
+    date,
+    amount: half,
+    isLate: date > dueDate,
+  });
+
+  return {
+    firstPayment: makePayment(chosenDates[0] ?? dueDate),
+    secondPayment: makePayment(chosenDates[1] ?? chosenDates[0] ?? dueDate),
+  };
+}
+
+// packages/shared/src/index.ts — add this
+export function getCurrentOccurrence(dueDate: number, referenceDate: Date = new Date()): Date {
+  return new Date(referenceDate.getFullYear(), referenceDate.getMonth(), dueDate);
 }
