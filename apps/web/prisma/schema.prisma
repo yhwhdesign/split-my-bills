@@ -54,14 +54,14 @@ model Bill {
   userId          String
   name            String
   amount          Decimal
-  dueDate         Int               // day of month, 1-31
+  dueDate         Int
   category        String?
   isRecurring     Boolean           @default(true)
   splittable      Boolean           @default(false)
   minSplitAmount  Decimal?
 
   user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  payments        Payment[]
+  payments        Payment[]         
   suggestions     SplitSuggestion[]
 
   createdAt       DateTime          @default(now())
@@ -76,6 +76,7 @@ model Payment {
   status          PaymentStatus @default(SCHEDULED)
   isSplitPayment  Boolean       @default(false)
   splitGroupId    String?
+  isLate          Boolean       @default(false)
 
   bill            Bill          @relation(fields: [billId], references: [id], onDelete: Cascade)
 
