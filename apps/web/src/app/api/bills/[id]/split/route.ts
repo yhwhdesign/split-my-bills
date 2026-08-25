@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserId } from "@/lib/session";
+import { createBillSplit } from "@/lib/split-bill";
 
 export async function POST(
   request: Request,
@@ -10,41 +10,12 @@ export async function POST(
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id: billId } = await params;
-  const { firstDate, secondDate } = await request.json();
 
-  const bill = await prisma.bill.findUnique({ where: { id: billId } });
-  if (!bill || bill.userId !== userId) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  try {
+    const result = await createBillSplit(billId, userId);
+    return NextResponse.json(result);
+  } catch (err: any) {
+    const status = err.message === "Bill not found" ? 404 : 400;
+    return NextResponse.json({ error: err.message }, { status });
   }
-  if (!bill.splittable) {
-    return NextResponse.json({ error: "This bill is not marked splittable" }, { status: 400 });
-  }
-
-  const halfAmount = Number(bill.amount) / 2;
-  const splitGroupId = crypto.randomUUID();
-
-  const [firstPayment, secondPayment] = await prisma.$transaction([
-    prisma.payment.create({
-      data: {
-        billId,
-        amount: halfAmount,
-        status: "SCHEDULED",
-        isSplitPayment: true,
-        splitGroupId,
-        paidDate: firstDate ? new Date(firstDate) : null,
-      },
-    }),
-    prisma.payment.create({
-      data: {
-        billId,
-        amount: halfAmount,
-        status: "SCHEDULED",
-        isSplitPayment: true,
-        splitGroupId,
-        paidDate: secondDate ? new Date(secondDate) : null,
-      },
-    }),
-  ]);
-
-  return NextResponse.json({ firstPayment, secondPayment, splitGroupId });
 }
