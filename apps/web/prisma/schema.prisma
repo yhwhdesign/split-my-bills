@@ -20,6 +20,11 @@ enum PaymentStatus {
   MISSED
 }
 
+enum FundingModel {
+    BEFORE_DUE
+    NEXT_CHECK
+}
+
 model User {
   id            String         @id @default(cuid())
   name          String
@@ -55,6 +60,7 @@ model Bill {
   name            String
   amount          Decimal
   dueDate         Int
+  fundingModel    FundingModel      @default(BEFORE_DUE)
   category        String?
   isRecurring     Boolean           @default(true)
   splittable      Boolean           @default(false)
