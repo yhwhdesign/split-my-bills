@@ -18,39 +18,51 @@ export async function GET() {
     },
   });
 
-  const billsWithStatus = bills.map((b) => {
-  const [occurrenceDueDate] = projectBillDueDates(b.dueDate);
-  const occStart = new Date(
-    occurrenceDueDate.getFullYear(),
-    occurrenceDueDate.getMonth(),
-    occurrenceDueDate.getDate()
-  );
-  const occEnd = new Date(occStart);
-  occEnd.setDate(occEnd.getDate() + 1);
+    const billsWithStatus = bills.map((b) => {
+    const occurrenceDueDate = getCurrentOccurrence(b.dueDate);
+    const occStart = new Date(
+      occurrenceDueDate.getFullYear(),
+      occurrenceDueDate.getMonth(),
+      occurrenceDueDate.getDate()
+    );
+    const occEnd = new Date(occStart);
+    occEnd.setDate(occEnd.getDate() + 1);
 
-  const paidThisMonth = b.payments.some(
-    (p) =>
-      p.status === "PAID" &&
-      !p.isSplitPayment &&
-      p.paidDate &&
-      p.paidDate >= occStart &&
-      p.paidDate < occEnd
-  );
+    const paidThisMonth = b.payments.some(
+      (p) =>
+        p.status === "PAID" &&
+        !p.isSplitPayment &&
+        p.paidDate &&
+        p.paidDate >= occStart &&
+        p.paidDate < occEnd
+    );
 
-  const currentOccurrence = getCurrentOccurrence(b.dueDate);
-  const isOverdue = !paidThisMonth && currentOccurrence < new Date();
+    const splitPayments = b.payments.filter(
+      (p) => p.isSplitPayment && p.status === "SCHEDULED"
+    );
+    const hasActiveSplit = splitPayments.length > 0;
 
-  const splitPayments = b.payments.filter(
-    (p) => p.isSplitPayment && p.status === "SCHEDULED"
-  );
-  return {
-    ...b,
-    paidThisMonth,
-    isOverdue,
-    hasActiveSplit: splitPayments.length > 0,
-    hasLateSplit: splitPayments.some((p) => p.isLate),
-  };
-});
+    const currentOccurrence = getCurrentOccurrence(b.dueDate);
+
+    const isOverdue = hasActiveSplit
+      ? currentOccurrence < new Date() &&
+        !b.payments.some(
+          (p) =>
+            p.isSplitPayment &&
+            p.status === "PAID" &&
+            p.paidDate &&
+            p.paidDate >= currentOccurrence
+        )
+      : !paidThisMonth && currentOccurrence < new Date();
+
+    return {
+      ...b,
+      paidThisMonth,
+      isOverdue,
+      hasActiveSplit,
+      hasLateSplit: splitPayments.some((p) => p.isLate),
+    };
+  });
 
   return NextResponse.json(billsWithStatus);
 }
@@ -59,7 +71,7 @@ export async function POST(request: NextRequest) {
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { name, amount, dueDate, category, splittable } = await request.json();
+  const { name, amount, dueDate, category, splittable, fundingModel } = await request.json();
 
   if (!name || !amount || !dueDate) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -73,6 +85,7 @@ export async function POST(request: NextRequest) {
       dueDate: Number(dueDate),
       category: category || null,
       splittable: !!splittable,
+      fundingModel: fundingModel === "NEXT_CHECK" ? "NEXT_CHECK" : "BEFORE_DUE",
     },
   });
 

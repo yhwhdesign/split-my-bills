@@ -158,6 +158,7 @@ export default function DashboardPage() {
         dueDate: formData.get("dueDate"),
         category: formData.get("category"),
         splittable: formData.get("splittable") === "on",
+        fundingModel: formData.get("fundingModel"),
       }),
     });
     form.reset();
@@ -603,6 +604,17 @@ export default function DashboardPage() {
                 <input type="checkbox" name="splittable" />
                 Splittable into two payments
               </label>
+              <div className="space-y-1">
+  <Label className="text-xs text-muted-foreground">When is this paid?</Label>
+  <select
+    name="fundingModel"
+    defaultValue="BEFORE_DUE"
+    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+  >
+    <option value="BEFORE_DUE">Paid from cash on hand, before the due date</option>
+    <option value="NEXT_CHECK">Paid from the next paycheck on or after the due date</option>
+  </select>
+</div>
               <Button type="submit" className="w-full font-semibold">
                 Add Bill
               </Button>

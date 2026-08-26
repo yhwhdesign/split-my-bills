@@ -2,6 +2,7 @@ import { calculatePayPeriods, generateSplitSuggestions, generateOpportunitySugge
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/session";
+import { ensureRecurringSplits } from "@/lib/split-bill";
 
 
 export async function GET() {
@@ -12,86 +13,91 @@ export async function GET() {
   const incomeSources = await prisma.incomeSource.findMany({ where: { userId } });
   const bills = await prisma.bill.findMany({ where: { userId } });
 
-  const splitPayments = await prisma.payment.findMany({
-  where: {
-    bill: { userId },
-    isSplitPayment: true,
-    status: "SCHEDULED",
-  },
-  include: { bill: true },
-});
-
-const overridesByBill = new Map<string, SplitPaymentOverride>();
-for (const payment of splitPayments) {
-  if (!payment.paidDate) continue;
-  const existing = overridesByBill.get(payment.billId);
-  const entry = { date: payment.paidDate, amount: Number(payment.amount) };
-  if (existing) {
-    existing.payments.push(entry);
-  } else {
-    overridesByBill.set(payment.billId, {
-      billId: payment.billId,
-      billName: payment.bill.name,
-      payments: [entry],
-    });
-  }
-}
-const splitOverrides = Array.from(overridesByBill.values());
-
   if (!user || incomeSources.length === 0) {
     return NextResponse.json({ periods: [] });
   }
+
+  const primaryIncome = incomeSources[0];
+
+  // Backfill any missing recurring-split pairs before we read payment data,
+  // so newly generated pairs are reflected in this same request.
+  for (const bill of bills) {
+    if (bill.splittable && bill.isRecurring) {
+      await ensureRecurringSplits(
+        {
+          id: bill.id,
+          dueDate: bill.dueDate,
+          amount: Number(bill.amount),
+        },
+        primaryIncome.frequency as PaySchedule,
+        primaryIncome.nextPayDate
+      );
+    }
+  }
+
+  const splitPayments = await prisma.payment.findMany({
+    where: {
+      bill: { userId },
+      isSplitPayment: true,
+      status: "SCHEDULED",
+    },
+    include: { bill: true },
+  });
+
+  const overridesByBill = new Map<string, SplitPaymentOverride>();
+  for (const payment of splitPayments) {
+    if (!payment.paidDate) continue;
+    const existing = overridesByBill.get(payment.billId);
+    const entry = { date: payment.paidDate, amount: Number(payment.amount) };
+    if (existing) {
+      existing.payments.push(entry);
+    } else {
+      overridesByBill.set(payment.billId, {
+        billId: payment.billId,
+        billName: payment.bill.name,
+        payments: [entry],
+      });
+    }
+  }
+  const splitOverrides = Array.from(overridesByBill.values());
 
   // For now, sum all income sources into one combined amount per the user's primary pay schedule.
   // (Multiple income sources with different schedules is a real future refinement — noted, not solved here.)
   const totalIncome = incomeSources.reduce((sum, i) => sum + Number(i.amount), 0);
 
   const paidPayments = await prisma.payment.findMany({
-  where: {
-    bill: { userId },
-    status: "PAID",
-    isSplitPayment: false,
-  },
-});
+    where: {
+      bill: { userId },
+      status: "PAID",
+      isSplitPayment: false,
+    },
+  });
 
-function isSameDay(a: Date, b: Date) {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
-}
-
-const paidOccurrences: PaidOccurrence[] = bills.flatMap((b) => {
-  //const [occurrenceDueDate] = projectBillDueDates(b.dueDate);
-  const occurrenceDueDate = getCurrentOccurrence(b.dueDate);
-  const isPaid = paidPayments.some(
-    (p) => p.billId === b.id && p.paidDate && isSameDay(p.paidDate, occurrenceDueDate)
-  );
-  return isPaid ? [{ billId: b.id, date: occurrenceDueDate }] : [];
-});
+  const paidOccurrences: PaidOccurrence[] = paidPayments
+    .filter((p) => p.paidDate !== null)
+    .map((p) => ({ billId: p.billId, date: p.paidDate! }));
 
   const sharedBills: Bill[] = bills.map((b) => ({
-  id: b.id,
-  name: b.name,
-  amount: Number(b.amount),
-  dueDate: b.dueDate,
-  splittable: b.splittable,
-}));
+    id: b.id,
+    name: b.name,
+    amount: Number(b.amount),
+    dueDate: b.dueDate,
+    splittable: b.splittable,
+    fundingModel: b.fundingModel,
+  }));
 
-const primaryIncome = incomeSources[0];
-const periods = calculatePayPeriods(
-  totalIncome,
-  primaryIncome.frequency as PaySchedule,
-  primaryIncome.nextPayDate,
-  sharedBills,
-  60,
-  splitOverrides,
-  paidOccurrences
-);
+  const periods = calculatePayPeriods(
+    totalIncome,
+    primaryIncome.frequency as PaySchedule,
+    primaryIncome.nextPayDate,
+    sharedBills,
+    60,
+    splitOverrides,
+    paidOccurrences
+  );
 
-const suggestions = generateSplitSuggestions(periods);
-const opportunities = generateOpportunitySuggestions(periods);
+  const suggestions = generateSplitSuggestions(periods);
+  const opportunities = generateOpportunitySuggestions(periods);
 
-return NextResponse.json({ periods, suggestions, opportunities });
+  return NextResponse.json({ periods, suggestions, opportunities });
 }
