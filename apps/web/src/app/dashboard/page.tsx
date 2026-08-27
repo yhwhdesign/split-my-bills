@@ -1,7 +1,7 @@
 "use client";
 
 import { DayOfMonthPicker } from "@/components/day-of-month-picker";
-import { SplitSquareHorizontal, AlertTriangle } from "lucide-react";
+import { SplitSquareHorizontal, AlertTriangle, HelpCircle, Menu, Info, LogOut } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { normalizeToMonthly, type PaySchedule } from "@split-my-bills/shared";
@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { InstallPrompt } from "@/components/install-prompt";
+//import { suggestCategory } from "@/lib/categorize-bill";
 
 type IncomeSource = {
   id: string;
@@ -68,6 +69,13 @@ type Bill = {
   isOverdue: boolean;
 };
 
+type NeedsReviewItem = {
+  billId: string;
+  billName: string;
+  amount: number;
+  dueDate: string;
+};
+
 export default function DashboardPage() {
   const router = useRouter();
   const [income, setIncome] = useState<IncomeSource[]>([]);
@@ -75,14 +83,18 @@ export default function DashboardPage() {
   const [periods, setPeriods] = useState<any[]>([]);
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [opportunities, setOpportunities] = useState<any[]>([]);
+  const [needsReview, setNeedsReview] = useState<NeedsReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingIncomeId, setEditingIncomeId] = useState<string | null>(null);
   const [editingBillId, setEditingBillId] = useState<string | null>(null);
   const [expandedPeriod, setExpandedPeriod] = useState<number | null>(null);
+  const [reviewingBillId, setReviewingBillId] = useState<string | null>(null);
   const [coaching, setCoaching] = useState<string | null>(null);
   const [coachingLoading, setCoachingLoading] = useState(false);
   const [limitReached, setLimitReached] = useState(false);
   const [userName, setUserName] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [legendOpen, setLegendOpen] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -107,6 +119,7 @@ export default function DashboardPage() {
     setPeriods(periodsData.periods ?? []);
     setSuggestions(periodsData.suggestions ?? []);
     setOpportunities(periodsData.opportunities ?? []);
+    setNeedsReview(periodsData.needsReview ?? []);
     const userData = await userRes.json();
     setUserName(userData.name ?? null);
     setLoading(false);
@@ -214,6 +227,19 @@ export default function DashboardPage() {
     loadData();
   }
 
+  async function handleResolveNeedsReview(billId: string, wasPaid: boolean) {
+    if (wasPaid) {
+      await fetch(`/api/bills/${billId}/pay`, { method: "POST" });
+      loadData();
+    }
+    // "Not yet" — just close this row for now. It isn't persisted anywhere,
+    // so it'll show up again next time needsReview is recomputed, and the
+    // bill's existing overdue indicator (if any) keeps doing its job elsewhere.
+    setReviewingBillId(null);
+  }
+
+  const needsReviewBillIds = new Set(needsReview.map((n) => n.billId));
+
   const totalIncome = income.reduce(
     (sum, i) => sum + normalizeToMonthly(Number(i.amount), i.frequency as PaySchedule),
     0
@@ -240,10 +266,70 @@ export default function DashboardPage() {
             {userName ? `Welcome back, ${userName}` : "Here's where things stand today"}
           </p>
         </div>
-        <Button variant="outline" onClick={handleLogout} className="shrink-0">
-          Log out
-        </Button>
+        <div className="relative shrink-0">
+          <button
+            onClick={() => setMenuOpen((v) => !v)}
+            className="p-2 rounded-md hover:bg-muted transition-colors"
+            aria-label="Menu"
+          >
+            <Menu size={20} />
+          </button>
+          {menuOpen && (
+            <div className="absolute right-0 mt-2 w-48 rounded-md border bg-background shadow-md z-10 overflow-hidden">
+              <button
+                onClick={() => {
+                  setLegendOpen(true);
+                  setMenuOpen(false);
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors text-left"
+              >
+                <Info size={14} />
+                Icon Legend
+              </button>
+              <button
+                onClick={handleLogout}
+                className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors text-left"
+              >
+                <LogOut size={14} />
+                Log out
+              </button>
+            </div>
+          )}
+        </div>
       </div>
+
+      {legendOpen && (
+        <Card className="shadow-sm border-border/50 py-6">
+          <CardHeader>
+            <CardTitle>Icon Legend</CardTitle>
+            <CardDescription>What the icons on your bills mean</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <div className="flex items-center gap-2">
+              <SplitSquareHorizontal size={14} className="text-primary" />
+              <span>This bill is split into two payments</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <AlertTriangle size={14} className="text-yellow-600" />
+              <span>A split payment for this bill is scheduled late</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <AlertTriangle size={14} className="text-red-500" />
+              <span>This bill's due date has passed and it isn't marked paid</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <HelpCircle size={14} className="text-blue-500" />
+              <span>
+                This bill has an earlier occurrence the app can't confirm — tap it to say
+                whether it was paid
+              </span>
+            </div>
+            <Button size="sm" variant="outline" onClick={() => setLegendOpen(false)}>
+              Close
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       <InstallPrompt />
 
@@ -494,6 +580,8 @@ export default function DashboardPage() {
           <CardContent className="space-y-4">
             {bills.map((b) => {
               const splitLegs = b.payments.filter((p) => p.isSplitPayment);
+              const needsBillReview = needsReviewBillIds.has(b.id);
+              const reviewItem = needsReview.find((n) => n.billId === b.id);
 
               return (
                 <div key={b.id} className="border-b pb-2">
@@ -522,6 +610,16 @@ export default function DashboardPage() {
                           )}
                           {b.hasLateSplit && <AlertTriangle size={13} className="text-yellow-600" />}
                           {b.isOverdue && <AlertTriangle size={13} className="text-red-500" />}
+                          {needsBillReview && (
+                            <button
+                              onClick={() =>
+                                setReviewingBillId(reviewingBillId === b.id ? null : b.id)
+                              }
+                              title="This bill has an earlier occurrence that needs your confirmation"
+                            >
+                              <HelpCircle size={13} className="text-blue-500" />
+                            </button>
+                          )}
                         </span>
                         <span className="text-xs text-muted-foreground flex items-center gap-1">
                           {getCategoryIcon(b.category)}
@@ -558,6 +656,36 @@ export default function DashboardPage() {
                       )}
                     </div>
                   </div>
+
+                  {reviewingBillId === b.id && reviewItem && (
+                    <div className="ml-6 mt-1.5 rounded-md border border-blue-200 bg-blue-50 p-2 text-xs space-y-2">
+                      <p>
+                        Was {reviewItem.billName} paid for{" "}
+                        {new Date(reviewItem.dueDate).toLocaleDateString(undefined, {
+                          timeZone: "UTC",
+                        })}
+                        ?
+                      </p>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => handleResolveNeedsReview(b.id, true)}
+                        >
+                          Paid
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          onClick={() => handleResolveNeedsReview(b.id, false)}
+                        >
+                          Not yet
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
                   {b.hasActiveSplit && splitLegs.length > 0 && (
                     <div className="ml-6 mt-1.5 space-y-1">
                       {splitLegs.map((leg) => {
@@ -587,6 +715,20 @@ export default function DashboardPage() {
               );
             })}
             <form onSubmit={handleAddBill} className="space-y-2 pt-2">
+              {/*<Input
+                name="name"
+                placeholder="Bill name"
+                required
+                onChange={(e) => {
+                  const suggestion = suggestCategory(e.target.value);
+                  const categoryInput = e.currentTarget.form?.elements.namedItem(
+                    "category"
+                  ) as HTMLInputElement;
+                  if (suggestion && categoryInput && !categoryInput.dataset.userEdited) {
+                    categoryInput.value = suggestion;
+                  }
+                }}
+              /> */}
               <Input name="name" placeholder="Bill name" required />
               <Input name="amount" type="number" step="0.01" placeholder="Amount" required />
               <div>
@@ -595,7 +737,7 @@ export default function DashboardPage() {
               </div>
               <Input
                 name="category"
-                placeholder="Category (optional)"
+                placeholder="Category (auto-suggested as you type)"
                 onChange={(e) => {
                   e.currentTarget.dataset.userEdited = "true";
                 }}
@@ -605,16 +747,16 @@ export default function DashboardPage() {
                 Splittable into two payments
               </label>
               <div className="space-y-1">
-  <Label className="text-xs text-muted-foreground">When is this paid?</Label>
-  <select
-    name="fundingModel"
-    defaultValue="BEFORE_DUE"
-    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-  >
-    <option value="BEFORE_DUE">Paid from cash on hand, before the due date</option>
-    <option value="NEXT_CHECK">Paid from the next paycheck on or after the due date</option>
-  </select>
-</div>
+                <Label className="text-xs text-muted-foreground">When is this paid?</Label>
+                <select
+                  name="fundingModel"
+                  defaultValue="BEFORE_DUE"
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+                >
+                  <option value="BEFORE_DUE">On time, from savings/cash on hand</option>
+                  <option value="NEXT_CHECK">From my next paycheck, even if that's a few days late</option>
+                </select>
+              </div>
               <Button type="submit" className="w-full font-semibold">
                 Add Bill
               </Button>

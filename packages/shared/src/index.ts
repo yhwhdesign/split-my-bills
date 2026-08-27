@@ -97,6 +97,30 @@ function advancePayDate(date: Date, schedule: PaySchedule): Date {
   return next;
 }
 
+function retreatPayDate(date: Date, schedule: PaySchedule): Date {
+  const prev = new Date(date);
+  switch (schedule) {
+    case "WEEKLY":
+      prev.setDate(prev.getDate() - 7);
+      break;
+    case "BIWEEKLY":
+      prev.setDate(prev.getDate() - 14);
+      break;
+    case "MONTHLY":
+      prev.setMonth(prev.getMonth() - 1);
+      break;
+    case "SEMIMONTHLY":
+      if (prev.getDate() > 1 && prev.getDate() <= 15) {
+        prev.setMonth(prev.getMonth() - 1);
+        prev.setDate(1);
+      } else {
+        prev.setDate(15);
+      }
+      break;
+  }
+  return prev;
+}
+
 export function projectBillDueDates(dueDate: number, windowDays: number = 60): Date[] {
   const dates: Date[] = [];
   const today = new Date();
@@ -130,6 +154,11 @@ export interface SplitPaymentOverride {
   billId: string;
   billName: string;
   payments: { date: Date; amount: number }[];
+}
+
+export interface PaidOccurrence {
+  billId: string;
+  date: Date;
 }
 
 export function calculatePayPeriods(
@@ -179,22 +208,40 @@ export function calculatePayPeriods(
 
     const billsInPeriod: { bill: Bill; dueDate: Date }[] = [];
 
-for (const { bill, dates } of billDueDates) {
-  for (const d of dates) {
-    if (isPaidOccurrence(bill.id, d)) continue;
+    for (const { bill, dates } of billDueDates) {
+      for (const d of dates) {
+        if (isPaidOccurrence(bill.id, d)) continue;
 
-    if (bill.fundingModel === "NEXT_CHECK") {
-      const fundingPayDate = payDates.find((pd) => pd >= d);
-      if (fundingPayDate && fundingPayDate >= start && fundingPayDate < end) {
-        billsInPeriod.push({ bill, dueDate: d });
-      }
-    } else {
-      if (d >= start && d < end) {
-        billsInPeriod.push({ bill, dueDate: d });
+        if (bill.fundingModel === "NEXT_CHECK") {
+          const fundingPayDate = payDates.find((pd) => pd >= d);
+          if (fundingPayDate && fundingPayDate >= start && fundingPayDate < end) {
+            billsInPeriod.push({ bill, dueDate: d });
+          }
+        } else {
+          if (d >= start && d < end) {
+            billsInPeriod.push({ bill, dueDate: d });
+          }
+        }
       }
     }
-  }
-}
+
+    for (const override of splitOverrides) {
+      for (const payment of override.payments) {
+        if (payment.date >= start && payment.date < end) {
+          billsInPeriod.push({
+            bill: {
+              id: override.billId,
+              name: `${override.billName} (split payment)`,
+              amount: payment.amount,
+              dueDate: payment.date.getDate(),
+              splittable: false,
+              fundingModel: "BEFORE_DUE",
+            },
+            dueDate: payment.date,
+          });
+        }
+      }
+    }
 
     const totalBillAmount = billsInPeriod.reduce((sum, b) => sum + b.bill.amount, 0);
     const shortfall = totalBillAmount - incomeAmount;
@@ -213,11 +260,6 @@ for (const { bill, dates } of billDueDates) {
   }
 
   return periods;
-}
-
-export interface PaidOccurrence {
-  billId: string;
-  date: Date;
 }
 
 export function normalizeToMonthly(amount: number, frequency: PaySchedule): number {
@@ -383,33 +425,8 @@ export function planBillSplit(
   };
 }
 
-// packages/shared/src/index.ts — add this
 export function getCurrentOccurrence(dueDate: number, referenceDate: Date = new Date()): Date {
   return new Date(referenceDate.getFullYear(), referenceDate.getMonth(), dueDate);
-}
-
-function retreatPayDate(date: Date, schedule: PaySchedule): Date {
-  const prev = new Date(date);
-  switch (schedule) {
-    case "WEEKLY":
-      prev.setDate(prev.getDate() - 7);
-      break;
-    case "BIWEEKLY":
-      prev.setDate(prev.getDate() - 14);
-      break;
-    case "MONTHLY":
-      prev.setMonth(prev.getMonth() - 1);
-      break;
-    case "SEMIMONTHLY":
-      if (prev.getDate() > 1 && prev.getDate() <= 15) {
-        prev.setMonth(prev.getMonth() - 1);
-        prev.setDate(1);
-      } else {
-        prev.setDate(15);
-      }
-      break;
-  }
-  return prev;
 }
 
 export function getPayDatesInRange(
@@ -430,4 +447,51 @@ export function getPayDatesInRange(
   }
 
   return payDates;
+}
+
+export interface UnresolvedOccurrence {
+  billId: string;
+  billName: string;
+  amount: number;
+  dueDate: Date;
+}
+
+export function findUnresolvedOccurrences(
+  bills: Bill[],
+  paySchedule: PaySchedule,
+  anchorDate: Date,
+  earliestPeriodStart: Date,
+  paidOccurrences: PaidOccurrence[]
+): UnresolvedOccurrence[] {
+  const lookbackStart = retreatPayDate(earliestPeriodStart, paySchedule);
+
+  const isPaidOccurrence = (billId: string, date: Date) =>
+    paidOccurrences.some(
+      (p) =>
+        p.billId === billId &&
+        p.date.getFullYear() === date.getFullYear() &&
+        p.date.getMonth() === date.getMonth() &&
+        p.date.getDate() === date.getDate()
+    );
+
+  const unresolved: UnresolvedOccurrence[] = [];
+
+  for (const bill of bills) {
+    const dueDate = nextOccurrenceOnOrAfter(bill.dueDate, lookbackStart);
+    if (dueDate >= earliestPeriodStart) continue; // visible in a real period already, not orphaned
+    if (isPaidOccurrence(bill.id, dueDate)) continue;
+
+    let assignmentDate = dueDate;
+    if (bill.fundingModel === "NEXT_CHECK") {
+      const payDatesInRange = getPayDatesInRange(paySchedule, anchorDate, lookbackStart, earliestPeriodStart);
+      const funding = payDatesInRange.find((pd) => pd >= dueDate);
+      if (funding) assignmentDate = funding;
+    }
+
+    if (assignmentDate < earliestPeriodStart) {
+      unresolved.push({ billId: bill.id, billName: bill.name, amount: bill.amount, dueDate });
+    }
+  }
+
+  return unresolved;
 }

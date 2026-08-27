@@ -1,4 +1,4 @@
-import { calculatePayPeriods, generateSplitSuggestions, generateOpportunitySuggestions, getCurrentOccurrence, type Bill, type PaySchedule, type SplitPaymentOverride, type PaidOccurrence } from "@split-my-bills/shared";
+import { calculatePayPeriods, generateSplitSuggestions, generateOpportunitySuggestions, getCurrentOccurrence, findUnresolvedOccurrences, type Bill, type PaySchedule, type SplitPaymentOverride, type PaidOccurrence } from "@split-my-bills/shared";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/session";
@@ -96,8 +96,18 @@ export async function GET() {
     paidOccurrences
   );
 
+  const needsReview = periods.length > 0
+    ? findUnresolvedOccurrences(
+        sharedBills,
+        primaryIncome.frequency as PaySchedule,
+        primaryIncome.nextPayDate,
+        periods[0].start,
+        paidOccurrences
+      )
+    : [];
+
   const suggestions = generateSplitSuggestions(periods);
   const opportunities = generateOpportunitySuggestions(periods);
 
-  return NextResponse.json({ periods, suggestions, opportunities });
+  return NextResponse.json({ periods, suggestions, opportunities, needsReview });
 }
