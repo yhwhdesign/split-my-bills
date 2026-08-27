@@ -23,6 +23,7 @@ export async function createBillSplit(billId: string, userId: string) {
     amount: Number(bill.amount),
     dueDate: bill.dueDate,
     splittable: bill.splittable,
+    fundingModel: bill.fundingModel,
   };
 
   const plan = planBillSplit(
