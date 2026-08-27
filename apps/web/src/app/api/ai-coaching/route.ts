@@ -30,6 +30,7 @@ export async function GET() {
     amount: Number(b.amount),
     dueDate: b.dueDate,
     splittable: b.splittable,
+    fundingModel: b.fundingModel,
   }));
 
   const periods = calculatePayPeriods(
