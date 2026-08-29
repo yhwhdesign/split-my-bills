@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { InstallPrompt } from "@/components/install-prompt";
+import { suggestCategory } from "@/lib/categorize-bill";
 
 type IncomeSource = {
   id: string;
@@ -714,13 +715,32 @@ export default function DashboardPage() {
               );
             })}
             <form onSubmit={handleAddBill} className="space-y-2 pt-2">
-              <Input name="name" placeholder="Bill name" required />
+              <Input
+  name="name"
+  placeholder="Bill name"
+  required
+  onChange={(e) => {
+    const suggestion = suggestCategory(e.target.value);
+    const categoryInput = e.currentTarget.form?.elements.namedItem(
+      "category"
+    ) as HTMLInputElement;
+    if (suggestion && categoryInput && !categoryInput.dataset.userEdited) {
+      categoryInput.value = suggestion;
+    }
+  }}
+/>
               <Input name="amount" type="number" step="0.01" placeholder="Amount" required />
               <div>
                 <Label className="text-xs text-muted-foreground">Due date</Label>
                 <DayOfMonthPicker name="dueDate" />
               </div>
-              <Input name="category" placeholder="Category (optional)" />
+              <Input
+  name="category"
+  placeholder="Category (auto-suggested as you type)"
+  onChange={(e) => {
+    e.currentTarget.dataset.userEdited = "true";
+  }}
+/>
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" name="splittable" />
                 Splittable into two payments
@@ -732,8 +752,8 @@ export default function DashboardPage() {
                   defaultValue="BEFORE_DUE"
                   className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
                 >
-                  <option value="BEFORE_DUE">On time, from savings/cash on hand</option>
-                  <option value="NEXT_CHECK">From my next paycheck, even if that's a few days late</option>
+                <option value="BEFORE_DUE">Paid on time, before it's due</option>
+                <option value="NEXT_CHECK">Paid from my next paycheck, even if that's a few days late</option>
                 </select>
               </div>
               <Button type="submit" className="w-full font-semibold">

@@ -126,8 +126,8 @@ export function EditBillModal({
               defaultValue={bill.fundingModel}
               className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
             >
-              <option value="BEFORE_DUE">On time, from savings/cash on hand</option>
-              <option value="NEXT_CHECK">From my next paycheck, even if that's a few days late</option>
+              <option value="BEFORE_DUE">Paid on time, before it's due</option>
+<option value="NEXT_CHECK">Paid from my next paycheck, even if that's a few days late</option>
             </select>
           </div>
 
