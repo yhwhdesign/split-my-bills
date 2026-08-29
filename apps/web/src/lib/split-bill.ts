@@ -135,3 +135,28 @@ export async function ensureRecurringSplits(
 
   return created;
 }
+
+export async function regenerateSplitsIfNeeded(
+  billId: string,
+  userId: string,
+  isSplittable: boolean
+) {
+  // Always clear out unpaid split legs — a structural change means "start over."
+  // Paid legs are historical fact and are never touched.
+  await prisma.payment.deleteMany({
+    where: {
+      billId,
+      isSplitPayment: true,
+      status: "SCHEDULED",
+    },
+  });
+
+  if (isSplittable) {
+    try {
+      await createBillSplit(billId, userId);
+    } catch (err) {
+      // Same tolerant handling as bill creation — e.g. no income source yet.
+      console.error("regenerateSplitsIfNeeded: split creation failed:", err);
+    }
+  }
+}

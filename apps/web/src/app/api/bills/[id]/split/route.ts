@@ -3,7 +3,7 @@ import { getCurrentUserId } from "@/lib/session";
 import { createBillSplit } from "@/lib/split-bill";
 
 export async function POST(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const userId = await getCurrentUserId();

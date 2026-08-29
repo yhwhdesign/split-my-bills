@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/session";
+import { createBillSplit, regenerateSplitsIfNeeded } from "@/lib/split-bill";
 
 export async function PATCH(
   request: NextRequest,
@@ -15,7 +16,10 @@ export async function PATCH(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const { name, amount, dueDate, category, splittable } = await request.json();
+  const { name, amount, dueDate, category, splittable, fundingModel } = await request.json();
+
+  const dueDateChanged = dueDate !== undefined && Number(dueDate) !== existing.dueDate;
+  const splittableChanged = splittable !== undefined && !!splittable !== existing.splittable;
 
   const updated = await prisma.bill.update({
     where: { id },
@@ -25,8 +29,15 @@ export async function PATCH(
       ...(dueDate && { dueDate: Number(dueDate) }),
       ...(category !== undefined && { category: category || null }),
       ...(splittable !== undefined && { splittable: !!splittable }),
+      ...(fundingModel === "NEXT_CHECK" || fundingModel === "BEFORE_DUE"
+        ? { fundingModel }
+        : {}),
     },
   });
+
+  if (dueDateChanged || splittableChanged) {
+    await regenerateSplitsIfNeeded(id, userId, updated.splittable);
+  }
 
   return NextResponse.json(updated);
 }
