@@ -1,6 +1,7 @@
 "use client";
 
 import { DayOfMonthPicker } from "@/components/day-of-month-picker";
+import { EditBillModal } from "@/components/edit-bill-modal";
 import { SplitSquareHorizontal, AlertTriangle, HelpCircle, Menu, Info, LogOut } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -37,7 +38,6 @@ import {
 } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { InstallPrompt } from "@/components/install-prompt";
-//import { suggestCategory } from "@/lib/categorize-bill";
 
 type IncomeSource = {
   id: string;
@@ -62,6 +62,7 @@ type Bill = {
   dueDate: number;
   category: string | null;
   splittable: boolean;
+  fundingModel: "BEFORE_DUE" | "NEXT_CHECK";
   paidThisMonth: boolean;
   hasActiveSplit: boolean;
   hasLateSplit: boolean;
@@ -198,11 +199,21 @@ export default function DashboardPage() {
     loadData();
   }
 
-  async function handleUpdateBill(id: string, amount: string) {
+  async function handleUpdateBill(
+    id: string,
+    updates: {
+      name: string;
+      amount: number;
+      dueDate: number;
+      category: string;
+      splittable: boolean;
+      fundingModel: string;
+    }
+  ) {
     await fetch(`/api/bills/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount: Number(amount) }),
+      body: JSON.stringify(updates),
     });
     setEditingBillId(null);
     loadData();
@@ -232,13 +243,11 @@ export default function DashboardPage() {
       await fetch(`/api/bills/${billId}/pay`, { method: "POST" });
       loadData();
     }
-    // "Not yet" — just close this row for now. It isn't persisted anywhere,
-    // so it'll show up again next time needsReview is recomputed, and the
-    // bill's existing overdue indicator (if any) keeps doing its job elsewhere.
     setReviewingBillId(null);
   }
 
   const needsReviewBillIds = new Set(needsReview.map((n) => n.billId));
+  const editingBill = bills.find((b) => b.id === editingBillId) ?? null;
 
   const totalIncome = income.reduce(
     (sum, i) => sum + normalizeToMonthly(Number(i.amount), i.frequency as PaySchedule),
@@ -629,31 +638,21 @@ export default function DashboardPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      {editingBillId === b.id ? (
-                        <EditAmountForm
-                          initialValue={b.amount}
-                          onSave={(val) => handleUpdateBill(b.id, val)}
-                          onCancel={() => setEditingBillId(null)}
-                        />
-                      ) : (
-                        <>
-                          <span className="font-semibold min-w-[70px] text-right inline-block">
-                            ${Number(b.amount).toFixed(2)}
-                          </span>
-                          <button
-                            onClick={() => setEditingBillId(b.id)}
-                            className="text-muted-foreground/50 hover:text-primary transition-colors"
-                          >
-                            <Pencil size={14} />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteBill(b.id)}
-                            className="text-muted-foreground/50 hover:text-destructive transition-colors"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </>
-                      )}
+                      <span className="font-semibold min-w-[70px] text-right inline-block">
+                        ${Number(b.amount).toFixed(2)}
+                      </span>
+                      <button
+                        onClick={() => setEditingBillId(b.id)}
+                        className="text-muted-foreground/50 hover:text-primary transition-colors"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteBill(b.id)}
+                        className="text-muted-foreground/50 hover:text-destructive transition-colors"
+                      >
+                        <Trash2 size={14} />
+                      </button>
                     </div>
                   </div>
 
@@ -715,33 +714,13 @@ export default function DashboardPage() {
               );
             })}
             <form onSubmit={handleAddBill} className="space-y-2 pt-2">
-              {/*<Input
-                name="name"
-                placeholder="Bill name"
-                required
-                onChange={(e) => {
-                  const suggestion = suggestCategory(e.target.value);
-                  const categoryInput = e.currentTarget.form?.elements.namedItem(
-                    "category"
-                  ) as HTMLInputElement;
-                  if (suggestion && categoryInput && !categoryInput.dataset.userEdited) {
-                    categoryInput.value = suggestion;
-                  }
-                }}
-              /> */}
               <Input name="name" placeholder="Bill name" required />
               <Input name="amount" type="number" step="0.01" placeholder="Amount" required />
               <div>
                 <Label className="text-xs text-muted-foreground">Due date</Label>
                 <DayOfMonthPicker name="dueDate" />
               </div>
-              <Input
-                name="category"
-                placeholder="Category (auto-suggested as you type)"
-                onChange={(e) => {
-                  e.currentTarget.dataset.userEdited = "true";
-                }}
-              />
+              <Input name="category" placeholder="Category (optional)" />
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" name="splittable" />
                 Splittable into two payments
@@ -764,6 +743,14 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {editingBill && (
+        <EditBillModal
+          bill={editingBill}
+          onClose={() => setEditingBillId(null)}
+          onSave={(updates) => handleUpdateBill(editingBill.id, updates)}
+        />
+      )}
     </main>
   );
 }
