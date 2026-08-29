@@ -7,19 +7,19 @@
 
 ## 1. Project Summary
 
-An EveryDollar-style budgeting app called **Split My Bills** (formerly "Bill Splitter") —
-positioned as a combined financial-coaching / budget / savings-potential app to help people
-who don't have the time (or won't take the time) to manage their finances properly.
+An EveryDollar-style budgeting app called **Split My Bills** — a combined
+financial-coaching / budget / savings-potential app to help people who don't have the time
+(or won't take the time) to manage their finances properly.
 
 Core differentiator: AI-assisted coaching that analyzes a user's income schedule vs. bill due
 dates and suggests whether splitting a bill into two smaller payments (aligned to paydays)
-would ease cashflow strain. A second, equally central differentiator: bill due dates and
-paycheck dates rarely line up — the app's job is to make that mismatch visible and manageable.
+would ease cashflow strain. A second differentiator: bill due dates and paycheck dates rarely
+line up — the app makes that mismatch visible and manageable, including modeling *how* a bill
+is actually funded (see `fundingModel` in Section 4).
 
-**Third differentiator (built this session, in its first real form):** the app can now flag
-bills whose relevant due-date occurrence has fallen through the cracks entirely — invisible to
-every generated pay period — and give the user one clear, per-bill place to resolve it. See
-Section 6 for the "needs review" feature.
+A third, still-developing differentiator: the app is starting to catch bills that would
+otherwise silently fall through the cracks of a purely forward-looking planner (see the
+"needs review" feature in Section 6).
 
 ---
 
@@ -27,7 +27,7 @@ Section 6 for the "needs review" feature.
 
 - **Net-zero cost.** Every service choice must have a genuinely free tier at our scale.
 - **No billing surprises, ever.** All AI calls route through our server, gated by a Usage
-  Governor (Phase 3.5).
+  Governor.
 - **Version control via GitHub.** Feature branches, merged via PR into `main`. Never commit
   directly to `main`.
 - **Local server must behave like it's live** — reachable from a real phone.
@@ -40,20 +40,23 @@ Section 6 for the "needs review" feature.
 - **How users get bill data in: manual entry + user-initiated statement upload only.**
 
 **Important conventions learned the hard way:**
-- Every Next.js 16 App Router dynamic route handler MUST declare `request: NextRequest` as its
-  literal first parameter, even if unused — omitting it is a real runtime crash.
+- Every Next.js 16 App Router dynamic route handler MUST declare `request: NextRequest`
+  (the exact type, not plain `Request`) as its literal first parameter, even if unused —
+  omitting it, or using the wrong type, is a real runtime/build failure, not just cosmetic.
 - Always run `npx prisma generate` after schema changes AND fully restart the dev server
-  afterward — a regenerated client on disk doesn't help an already-running process.
+  afterward.
 - `npx prisma migrate dev` must be run from `apps/web` (where `prisma.config.ts` lives), even
-  though `node_modules` is hoisted to the monorepo root in this Turborepo setup.
+  though `node_modules` is hoisted to the monorepo root.
+- **Run `npm run build` locally before every commit/merge to `main`** — `next dev`'s compiler
+  is more lenient than a full production build and has twice let real type errors through
+  that only surfaced at deploy time (a `Bill` object literal missing `fundingModel`; a route
+  handler typed as plain `Request` instead of `NextRequest`).
 - A "module export doesn't exist" error that survives a full cache clear (`rm -rf
-  apps/web/.next .turbo`) may not actually be a caching issue at all — confirm the file's
-  actual content on disk matches what you think you saved before assuming it's a cache
-  problem. (This session: a fix meant for `packages/shared/src/index.ts` was accidentally
-  pasted into `split-suggestions/route.ts` instead — the error was 100% accurate.)
+  apps/web/.next .turbo`) may not be a caching issue at all — confirm the file's actual
+  content on disk before assuming it's still a cache problem (a fix meant for one file was
+  once accidentally pasted into a different file, producing a fully accurate error).
 - A single mistyped object key in a JSON body fails completely silently — check exact field
-  names character-by-character when a saved value "isn't matching" despite correct-looking
-  code on both ends.
+  names character-by-character when a value "isn't matching" despite correct-looking code.
 
 ---
 
@@ -64,7 +67,7 @@ Section 6 for the "needs review" feature.
 | Monorepo tool | **Turborepo** | |
 | Backend | Next.js API routes | No separate backend server |
 | Frontend | **Next.js, built as a PWA** | One codebase |
-| UI components | **shadcn/ui** (indigo/violet accent) | |
+| UI components | **shadcn/ui** (indigo/violet accent) | No Dialog/modal component installed yet — custom overlays built plainly with Tailwind |
 | Database | Postgres via Neon | Free tier, scales to zero when idle |
 | ORM | **Prisma 7** | Driver adapters |
 | Validation | Zod | Installed, not yet wired into API routes |
@@ -100,15 +103,18 @@ SplitSuggestion (AI-generated, cached)
     suggested_dates[], confidence, created_at
 ```
 
-**`Bill.fundingModel`** (added last session, confirmed working):
+**`Bill.fundingModel`**:
 - `BEFORE_DUE`: due date must fall within a pay period's date range — for bills covered by
-  cash-on-hand before they're due (e.g. a water bill due the 25th).
-- `NEXT_CHECK`: attributed to whichever paycheck lands on/after the due date, regardless of
-  which period the due date itself falls in — for bills always paid from a specific/next
-  paycheck (e.g. a mortgage due the 1st, always funded by the month's first paycheck).
+  cash-on-hand before they're due.
+- `NEXT_CHECK`: attributed to whichever paycheck lands on/after the due date — for bills
+  always paid from a specific/next paycheck regardless of due date (e.g. a mortgage always
+  funded by the month's first paycheck, even if that lands after the 1st).
 
-Split-payment legs recur automatically every pay cycle (via `ensureRecurringSplits()`) and can
-be marked paid/unpaid independently via their own `status` field.
+**Full bill editing** (built this session): every field is editable via a modal, with a clear
+rule for what happens to existing data — plain fields (amount, category, fundingModel) update
+in place with no side effects; changing `dueDate` or toggling `splittable` deletes existing
+*unpaid* split legs and regenerates a fresh pair if the bill is still splittable. **Paid
+history is never touched by an edit** — it's treated as an immutable historical fact.
 
 ---
 
@@ -129,135 +135,109 @@ English — it does not do the math.
 - [ ] **Phase 4 — Statement Import & Trend Analysis** — not started
 - [x] **Phase 5 — PWA Polish (core)** — complete and verified on a real iPhone
 - [ ] **Phase 6 — Visual Design System & Polish** — in progress. Shipped: dark hero card,
-  `Logo`, category icons, pill status badges, split-leg sub-row UI, overdue-bill indicator,
-  hamburger menu + Icon Legend (this session), per-bill "needs review" indicator (this
-  session). Still open: dashboard-as-hub restructuring, further settings under the hamburger
-  menu, loading/empty states, motion.
+  category icons, split-leg sub-row UI, overdue-bill indicator, hamburger menu + Icon Legend,
+  per-bill "needs review" indicator, **full bill editing modal (this session)**. Still open:
+  dashboard-as-hub restructuring, further settings under the hamburger menu, loading/empty
+  states, motion.
 - [ ] **Phase 7 — Savings Guidance (future)** — not scoped in detail.
 
-**"Current state" reconciliation feature — first real piece shipped this session:**
+**"Current state" reconciliation feature:**
 - [x] Per-bill "needs review" detection for occurrences orphaned by the forward-only period
   builder (one-cycle lookback window) — built and confirmed working.
-- [ ] Full mid-cycle onboarding reconciliation (someone starting the app mid-month reviewing
-  everything at once) — not built.
+- [ ] Full mid-cycle onboarding reconciliation flow — not built.
 - [ ] End-of-cycle "Did you get paid?" proactive confirmation flow — not built.
 
 ---
 
-## Recently Fixed / Built (2026-08-27 session — "needs review" reconciliation feature)
+## Recently Fixed / Built (2026-08-28 session — full bill editing + cleanup)
 
-**Scoped the reconciliation problem precisely, rather than building the full originally-
-envisioned system.** The real, narrow gap: a bill's relevant occurrence (due date for
-`BEFORE_DUE`, funding paycheck date for `NEXT_CHECK`) can fall **before the very first period
-`calculatePayPeriods()` generates**, making it invisible everywhere in the app — no checkbox,
-no period listing, nothing. This is different from an ordinary overdue bill, which already has
-a real period and a visible checkbox to resolve it.
+**Final `request: NextRequest` fix.** Of the three route handlers flagged as still needing
+this fix, only one actually still needed it: `bills/[id]/split/route.ts`'s `POST` was typed
+as plain `Request` instead of `NextRequest` — structurally similar (has a first parameter,
+compiles under `next dev`) but fails Next.js's route type validator at build time. The other
+two files (`bills/[id]/route.ts`, `income/[id]/route.ts`) were already correct. Fixed and
+confirmed with a clean `npm run build`.
 
-**Design decisions, made explicitly before coding:**
-- Lookback window: exactly **one pay cycle** before the earliest period — using the user's
-  real pay frequency, not a fixed number of months. Reasoning (user's own): "anything beyond
-  one cycle, the user is misusing the app at that point" — deliberately not designed to catch
-  multiple stacked missed cycles.
-- Visibility: both an always-visible **per-bill icon** and available on demand — no separate
-  dashboard-wide banner.
-- Confirming paid: **no date picker** — just yes/no, using the due date automatically.
-- Confirming "not yet": **no persisted state** — just closes the prompt for that view. The
-  bill's existing overdue indicator (if any) keeps doing its job; the review prompt reappears
-  next time `needsReview` is recomputed.
+**Full bill editing — designed, built, and confirmed working end-to-end.**
+- Explicit design principle agreed before coding (user's own framing): "changes are just
+  that, changes... we could delete the old data and treat changes that affect major things
+  like new data completely." Translated into a concrete rule:
+  - Plain field edits (amount, category, `fundingModel`) — update in place, no side effects.
+  - `dueDate` change or `splittable` toggle — delete existing *unpaid* (`SCHEDULED`) split
+    legs; if the bill is still splittable, immediately regenerate a fresh pair.
+  - **Paid payment history is never touched by an edit**, regardless of what else changes.
+- `apps/web/src/lib/split-bill.ts`: added `regenerateSplitsIfNeeded()` implementing this
+  rule.
+- `apps/web/src/app/api/bills/[id]/route.ts`: `PATCH` now accepts `fundingModel` (with the
+  same defensive validation as `POST`) and calls `regenerateSplitsIfNeeded()` when `dueDate`
+  or `splittable` actually change.
+- `apps/web/src/components/edit-bill-modal.tsx` (new file): a plain custom modal overlay
+  (backdrop + centered card, click-outside-to-close) — no shadcn Dialog component existed in
+  the project, so this was built directly with Tailwind. Uses the same `FormData`-on-submit
+  pattern as the existing add-bill form, because `DayOfMonthPicker` is an uncontrolled
+  component (manages its own internal state, only exposes its value via a hidden form input)
+  and mixing controlled/uncontrolled patterns in the same form would have been fragile. Shows
+  a live yellow warning banner the moment `splittable` or the due date are touched, explaining
+  the split-schedule reset *before* the user saves.
+- `dashboard/page.tsx`: pencil icon now always opens the modal (replacing the old
+  amount-only inline `EditAmountForm` for bills — income editing is unchanged).
+- **Confirmed working via real testing**: toggling `splittable` on regenerates fresh split
+  legs correctly; toggling it back off cleanly removes them (while still unpaid).
 
-**Built:**
-- `packages/shared/src/index.ts`: `findUnresolvedOccurrences(bills, paySchedule, anchorDate,
-  earliestPeriodStart, paidOccurrences)` — walks back exactly one pay cycle from the earliest
-  period's start (via the existing `retreatPayDate()`), and flags any bill whose relevant
-  occurrence/funding date falls before that period start and isn't already paid.
-- `/api/split-suggestions/route.ts`: calls it after `periods` is computed, adds `needsReview`
-  to the JSON response.
-- `dashboard/page.tsx`: cross-references `needsReview` against the Bills list by `billId`; a
-  blue `HelpCircle` icon appears next to any flagged bill. Clicking it expands an inline
-  prompt ("Was [bill] paid for [date]? [Paid] [Not yet]") — same expand-in-place pattern as
-  existing split-leg sub-rows. "Paid" calls the existing pay endpoint; "Not yet" just closes
-  the prompt.
-- Added a **hamburger menu** to the dashboard header, replacing the standalone Log out button
-  — opens a dropdown with "Icon Legend" (a plain-language card explaining every bill icon:
-  split, late split, overdue, needs review) and "Log out". Meant to be the future home for
-  account/settings items generally.
+**Two small backlog items closed out:**
+- `fundingModel` dropdown wording revisited a second time via explicit choice among 3
+  candidate phrasings. Settled on: **"Paid on time, before it's due"** /
+  **"Paid from my next paycheck, even if that's a few days late"** — applied in both the
+  add-bill form and the edit modal.
+- `apps/web/src/lib/categorize-bill.ts` rebuilt from scratch (the original had been lost,
+  likely in an earlier merge). Keyword-to-category matching, first-match-wins, matches the
+  app's actual category set exactly (so every suggestion has a corresponding icon). Re-wired
+  into the add-bill form's name/category `onChange` handlers. Confirmed working (e.g. typing
+  "Netflix" auto-fills "subscription").
 
-**Confirmed working via real testing:** a bill due in the "orphan window" (roughly the 7th–20th
-of the month, given this household's biweekly 8/21 anchor) correctly triggers the review icon.
-Bills already fixed by `fundingModel` (the mortgage/gas examples from last session) correctly
-do NOT trigger it, since `fundingModel` already made them visible in a real period — confirming
-the two features are correctly scoped as separate, non-overlapping fixes.
-
-**Also this session:**
-- Discovered `apps/web/src/lib/categorize-bill.ts` (an auto-suggest-category-as-you-type
-  feature) doesn't actually exist on disk, despite being referenced in `dashboard/page.tsx` —
-  likely lost in an earlier merge. Removed the dead reference rather than reconstruct it blind;
-  logged as a small backlog item to rebuild later if wanted.
-- Flagged the `fundingModel` dropdown wording as still not ideal for non-technical users after
-  one improvement pass ("On time, from savings/cash on hand" / "From my next paycheck, even if
-  that's a few days late") — deliberately deferred further wording work to a later session.
-- Hit and resolved a confusing tooling moment: a "module export doesn't exist" error survived a
-  full cache clear because the actual bug was pasting a code fix into the wrong file (meant for
-  `packages/shared/src/index.ts`, went into `split-suggestions/route.ts` instead) — worth
-  remembering that this exact error message can be either a real caching issue or a genuinely
-  missing export, and confirming file contents directly settles it fastest.
+**New standing lesson reinforced twice now:** `next dev`'s compiler is meaningfully more
+lenient than a full production build. Run `npm run build` locally before every commit/merge
+to `main` — don't rely on the dev server showing no errors as proof the code is deploy-ready.
 
 ---
 
+## Previously Fixed (2026-08-27 session — "needs review" reconciliation feature)
+
+Built `findUnresolvedOccurrences()` — flags a bill when its relevant occurrence falls before
+the earliest generated period (genuinely invisible to the app), using a one-pay-cycle lookback
+window (the user's own principle: "anything beyond one cycle, the user is misusing the app").
+Shown as a per-bill blue `HelpCircle` icon with an inline Paid/Not-yet resolve prompt. Also
+added a hamburger menu with an Icon Legend, replacing the standalone Log out button.
+
 ## Previously Fixed (2026-08-26 session — recurring splits + fundingModel)
 
-- Recurring split generation: `getPayDatesInRange()`, rewritten `pickSplitDates()`,
-  `ensureRecurringSplits()` — every splittable+recurring bill now gets a fresh pair of split
-  payments each pay cycle automatically.
-- `fundingModel` feature: schema migration, API validation, UI select, `calculatePayPeriods()`
-  branching logic — confirmed correct with real testing (mortgage due 1st, funded by the 9/4
-  paycheck, correctly excluded from the 8/21 period).
-- Found and fixed 4 real bugs along the way: a silently-swallowed typo (`findingModel` vs.
-  `fundingModel`), a regressed `paidThisMonth` calculation, a stale calendar-relative
-  `paidOccurrences` check, and a duplicate assignment loop left in `calculatePayPeriods()` from
-  an incomplete edit.
+Built `getPayDatesInRange()`, `ensureRecurringSplits()` for automatic recurring split
+generation. Designed and built the `fundingModel` feature end-to-end, including schema
+migration, API validation, UI, and `calculatePayPeriods()` branching logic.
 
 ## Previously Fixed (2026-08-24 and 2026-08-23 sessions)
 
-- Occurrence-based paid tracking (`getCurrentOccurrence()` vs. `projectBillDueDates()`)
-- Per-split-leg independent paid/unpaid toggling
-- Due-date-anchored one-time split logic
-- Auto-split-on-bill-creation, pay-period boundary fix, Prisma schema relation fix
-- Overdue-bill visual indicator, including correct split-bill handling
+Occurrence-based paid tracking, per-split-leg independent paid tracking, due-date-anchored
+split logic, auto-split-on-creation, pay-period boundary fix, overdue-bill visual indicator.
 
 ---
 
 ## Known Gaps — Actively Being Worked
 
-- **The broader "current state" reconciliation concept is only partially built.** This
-  session's `needsReview` feature covers the specific "orphaned occurrence" case. Still open:
-  a full mid-cycle onboarding flow (someone starting the app mid-month reviewing everything at
-  once) and an end-of-cycle "Did you get paid?" proactive confirmation. Both remain future
-  backlog items, not yet designed in detail.
-- **Three route handlers still missing the required `request: NextRequest` parameter**
-  (`bills/[id]/route.ts` DELETE, `bills/[id]/split/route.ts` POST, `income/[id]/route.ts`
-  DELETE).
-- **`fundingModel` dropdown wording** still not ideal for non-technical users — flagged for a
-  future wording pass.
+- **The broader "current state" reconciliation concept is only partially built.** The
+  `needsReview` feature covers the specific "orphaned occurrence" case. Still open: a full
+  mid-cycle onboarding flow and an end-of-cycle "Did you get paid?" proactive confirmation.
+  Both remain future backlog items needing their own design pass, the way `needsReview` got.
 
 ---
 
 ## Future / Backlog
 
-- **Full bill editing.** Currently only `amount` is editable via a small inline form.
-  Requested: edit everything (due date, category, splittable, fundingModel) — needs the full
-  add-bill form fields reused for editing, `PATCH /api/bills/[id]/route.ts` updated to accept
-  all fields, and a real product decision on what happens to existing split `Payment` rows
-  when a bill's due date or splittable status changes after the fact.
-- **Rebuild `categorize-bill.ts`** (auto-suggest category as the user types a bill name) —
-  discovered missing this session; not urgent, but was a nice small UX touch.
-- **`fundingModel` wording pass** for non-technical users — current phrasing is clearer than
-  the original but still not fully plain-language.
+- **Full mid-cycle onboarding reconciliation flow** and **end-of-cycle "Did you get paid?"
+  confirmation** — the remaining, un-built pieces of the "current state" concept.
 - **Multi-income-source pay-schedule limitation** — `calculatePayPeriods()` only uses
   `incomeSources[0]`'s pay schedule/anchor. Not an issue for this household, real gap for
   others.
-- **Full mid-cycle onboarding reconciliation flow** and **end-of-cycle "Did you get paid?"
-  confirmation** — the remaining, un-built pieces of the "current state" concept.
 - **Consolidate duplicate date-equality logic** across a few files into one shared helper.
 - **Handle stale/historical split-payment rows in the UI** if a bill ever accumulates split
   history across multiple cycles.
@@ -268,6 +248,9 @@ the two features are correctly scoped as separate, non-overlapping fixes.
   restructuring** — all previously logged, unchanged this session.
 - **Security hardening**: dependency scanning, Zod validation on API routes, re-enable
   `noUnusedLocals`/`noUnusedParameters` in `tsconfig.json` once the codebase is stable enough.
+- **Consider adopting a real shadcn Dialog component** now that a second modal-style UI
+  pattern (`EditBillModal`) exists — currently built with a plain custom overlay; worth
+  consolidating into a shared, reusable modal primitive if a third one comes up.
 
 **Design Direction**: BillOut + 1Bill + EveryDollar + Rocket Money references, unchanged.
 Not yet decided: exact full palette, font pairing, dark mode toggle.
@@ -279,21 +262,24 @@ Not yet decided: exact full palette, font pairing, dark mode toggle.
 **Phase:** Phases 0–3.5 fully complete, deployed, verified live. Phase 5 core complete.
 Phase 6 in progress.
 
-**2026-08-27 session:** Designed and built the first real, working piece of the "current
-state" reconciliation feature — a precisely-scoped "needs review" indicator for bill
-occurrences that fall through the cracks of the app's forward-only period logic (rather than
-the full originally-envisioned mid-cycle-onboarding system). Confirmed working via real
-testing, correctly distinguishing itself from bills already fixed by last session's
-`fundingModel` work. Also shipped a hamburger menu with an Icon Legend, laying groundwork for
-future settings. Found a missing file (`categorize-bill.ts`) and resolved cleanly by removing
-the dead reference rather than reconstructing blind.
+**2026-08-28 session:** Closed out the last remaining `request: NextRequest` typing issue
+(only 1 of the 3 previously-flagged files actually still needed it). Designed and built full
+bill editing as its own properly-scoped feature — a clear, explicit rule for what happens to
+existing split-payment data when a bill's structural fields change, built via a new custom
+modal component, confirmed working end-to-end with real testing. Closed out two smaller
+backlog items: a second wording pass on the `fundingModel` dropdown (chosen via explicit
+comparison of 3 candidates) and a full rebuild of the previously-lost `categorize-bill.ts`
+auto-suggest feature. Reinforced the "always run a full `npm run build` before merging to
+`main`" lesson a second time.
 
-**Known real gap, next up:** the three remaining `request: NextRequest` fixes (quick,
-low-risk), then full bill editing (a real, larger scope item).
+**Known real gap, next up:** the broader "current state" reconciliation concept (mid-cycle
+onboarding, end-of-cycle confirmation) is still only partially built; multi-income-source
+support remains a real gap for other users.
 
-**Next: fix the 3 remaining route handlers, then scope and build full bill editing.**
+**Next: pick between the remaining reconciliation-feature pieces or multi-income-source
+support as the next scoped feature to design and build.**
 
-**Last updated:** 2026-08-27
+**Last updated:** 2026-08-28
 
 ---
 
@@ -302,17 +288,16 @@ low-risk), then full bill editing (a real, larger scope item).
 | Date | Decision | Reasoning |
 |---|---|---|
 | 2026-07-14 | Web + mobile, shared backend | One codebase covers both platforms |
-| 2026-07-14 | Manual entry first, Plaid later | Reduces early complexity/cost risk |
 | 2026-07-14 | Rules engine + LLM explains (not LLM does math) | Reliability + cost control |
 | 2026-07-16 | Ollama (dev) / Gemini Flash-Lite governed (prod) | Genuinely free at both stages |
 | 2026-07-16 | Dropped React Native/Expo, going PWA instead | No store fees, one codebase |
 | 2026-08-23 | Occurrence-based paid tracking distinct from forward-only due-date projection | "Which occurrence is paid" and "what's next" are different questions |
-| 2026-08-24 | Split dates anchored to the bill's due date, not today's date | Splits fund a bill by its due date regardless of when the app is opened |
-| 2026-08-24 | Merged 3 backlog ideas into one future "current state" reconciliation feature | All three are the same underlying need: a view that looks both backward and forward |
-| 2026-08-26 | Recurring split generation is automatic/default, no separate one-time-split mode | Every real recurring bill split in practice is recurring; deletion covers the exception |
-| 2026-08-26 | Added explicit `Bill.fundingModel` field instead of trying to infer funding behavior | Two real bill-funding behaviors are legitimate but mutually exclusive; an explicit choice is more honest than clever inference |
-| 2026-08-27 | Scoped the reconciliation feature narrowly to "orphaned occurrences" only, not the full mid-cycle system | Precise, buildable in one session, and directly solves the concrete gap found through real testing, without overreaching into unbuilt UX |
-| 2026-08-27 | Reconciliation lookback is exactly one pay cycle, no further | User's own principle: beyond one missed cycle is considered misuse of the app, not a case worth designing for |
+| 2026-08-24 | Merged 3 backlog ideas into one future "current state" reconciliation feature | All three are the same underlying need |
+| 2026-08-26 | Added explicit `Bill.fundingModel` field instead of trying to infer funding behavior | Two real bill-funding behaviors are legitimate but mutually exclusive |
+| 2026-08-27 | Scoped the reconciliation feature narrowly to "orphaned occurrences" only | Precise, buildable in one session, directly solves the concrete gap found through testing |
+| 2026-08-27 | Reconciliation lookback is exactly one pay cycle, no further | Beyond one missed cycle is considered misuse of the app, not worth designing for |
+| 2026-08-28 | Editing a bill's due date or splittable status deletes unpaid split legs and regenerates fresh ones; paid history is never touched | "Changes are just that, changes" — treat structural edits as starting the split plan over, rather than trying to migrate/reconcile stale data; history stays immutable |
+| 2026-08-28 | Built EditBillModal as a plain custom overlay rather than adopting a component library Dialog | No modal pattern existed yet in the project; kept consistent with the app's existing plain-Tailwind conventions rather than introducing a new dependency for one feature |
 
 ---
 
@@ -320,47 +305,39 @@ low-risk), then full bill editing (a real, larger scope item).
 
 *(Full history through 2026-07-22 preserved in prior version of this document.)*
 
-- **2026-08-23 (three sessions)**: Fixed auto-split-on-creation, pay-period boundary bug,
-  occurrence-tracking bugs, split-leg independent paid tracking, a runtime crash from a missing
-  `request` parameter, and stale test data cleanup.
+- **2026-08-23 through 2026-08-26**: Built and confirmed occurrence-based paid tracking,
+  per-split-leg independent paid tracking, due-date-anchored split logic, automatic recurring
+  split generation, and the `fundingModel` feature. Found and fixed numerous real bugs along
+  the way, including several silent-failure classes (typos, stale cached logic, duplicate
+  code paths).
 
-- **2026-08-24**: Fixed the split-date anchoring bug via a real example. Ran deliberate A/B
-  tests confirming core paid-tracking behavior. Shipped the overdue-bill visual indicator.
-  Merged to `main`. Named the "current state" reconciliation concept and the recurring-splits
-  gap from real usage.
+- **2026-08-27**: Designed and built the "needs review" reconciliation feature through
+  explicit up-front design decisions before writing code. Added a hamburger menu with an
+  Icon Legend. Confirmed working via real testing.
 
-- **2026-08-26**: Built recurring split generation end-to-end. Designed and built the
-  `fundingModel` feature to resolve a genuine conflict between two real bill-funding
-  behaviors. Found and fixed 4 real bugs during testing. Confirmed the fix works with real
-  data. Testing surfaced a concrete example of the reconciliation feature's shape.
-
-- **2026-08-27**: Designed the "needs review" reconciliation feature through explicit
-  up-front design decisions (lookback window, visibility, confirmation flow) before writing
-  code. Built `findUnresolvedOccurrences()`, wired it into `/api/split-suggestions`, and built
-  the per-bill icon + inline resolve UI in the dashboard, plus a new hamburger menu with an
-  Icon Legend. Confirmed working via real testing — correctly triggers for genuinely orphaned
-  bills, correctly stays silent for bills already fixed by `fundingModel`. Discovered and
-  resolved a missing file (`categorize-bill.ts`) by removing the dead reference. Flagged
-  `fundingModel` wording for a future pass. **Left open:** the 3 remaining
-  `request: NextRequest` fixes, full bill editing, `categorize-bill.ts` rebuild, and the
-  broader mid-cycle-onboarding / end-of-cycle-confirmation pieces of the reconciliation
-  concept.
+- **2026-08-28**: Fixed the final `request: NextRequest` typing issue (found only 1 of 3
+  previously-flagged files still needed it). Designed and built full bill editing — agreed an
+  explicit "structural change resets the split plan, paid history is immutable" rule before
+  writing any code, built a new `EditBillModal` component, and confirmed the regenerate/remove
+  split-leg logic works correctly in both directions via real testing. Revisited the
+  `fundingModel` wording via explicit comparison of 3 phrasings. Rebuilt the previously-lost
+  `categorize-bill.ts` auto-suggest feature from scratch and confirmed it working. Reinforced
+  the "run `npm run build` before merging" lesson a second time after catching another type
+  error the dev server had missed. **Left open:** the remaining "current state" reconciliation
+  pieces (mid-cycle onboarding, end-of-cycle confirmation) and multi-income-source support.
 
 ---
 
 ## 10. Next Step (pick up here next session)
 
-1. **Fix the 3 remaining route handlers** missing `request: NextRequest`:
-   `bills/[id]/route.ts` DELETE, `bills/[id]/split/route.ts` POST, `income/[id]/route.ts`
-   DELETE.
-2. **Scope and build full bill editing** (amount, due date, category, splittable,
-   fundingModel) — including the product decision on what happens to existing split
-   `Payment` rows when relevant fields change.
-3. **Revisit `fundingModel` dropdown wording** for non-technical users.
-4. **Rebuild `categorize-bill.ts`** if still wanted (auto-suggest category as the user types).
-5. Lower priority: multi-income-schedule support, full mid-cycle onboarding reconciliation,
-   end-of-cycle "Did you get paid?" confirmation, `noUnusedLocals`/`noUnusedParameters`,
-   consolidating duplicate date-equality logic.
+1. **Decide and design the next scoped feature** — likely one of:
+   - The remaining reconciliation pieces (full mid-cycle onboarding review, or the
+     end-of-cycle "Did you get paid?" confirmation flow).
+   - Multi-income-source pay-schedule support (a real gap for other users, though not this
+     household).
+2. Lower priority: `noUnusedLocals`/`noUnusedParameters`, consolidating duplicate
+   date-equality logic, considering a real Dialog component now that two modal-style UI
+   patterns exist.
 
 **Standing lessons/habits to keep in mind going forward:**
 - With `--src-dir`, `proxy.ts` goes in `src/`, not `apps/web/` root.
@@ -369,20 +346,19 @@ low-risk), then full bill editing (a real, larger scope item).
   error persists after a genuinely clean cache clear, confirm the file's real content on disk
   before assuming it's still a cache problem.
 - Quote bracket-named folders (`[id]`) in shell commands.
-- Confirm `pwd` before path-sensitive commands — `node_modules` lives at the monorepo root,
-  not inside `apps/web`.
+- Confirm `pwd` before path-sensitive commands — `node_modules` lives at the monorepo root.
 - Commit real bug fixes immediately once confirmed working.
-- Next.js 16 App Router dynamic route handlers need `request: NextRequest` as the literal
-  first parameter, even if unused.
-- Never feed a function a fabricated substitute for a value it treats as authoritative (real
-  anchor dates, IDs, etc.) — compute the real range around the real value instead.
+- **Run a full `npm run build` locally before every commit/merge to `main`** — this has
+  caught real errors twice that `next dev` missed.
+- Next.js 16 App Router dynamic route handlers need `request: NextRequest` — the exact type,
+  not plain `Request` — as the literal first parameter, even if unused.
+- Never feed a function a fabricated substitute for a value it treats as authoritative.
 - When two real-world behaviors are legitimate but mutually exclusive, add an explicit stored
   user choice — don't try to infer or guess.
 - A silently-swallowed typo in an object key produces no error anywhere, just a
-  wrong-but-plausible fallback — check exact field names character-by-character.
+  wrong-but-plausible fallback.
 - When replacing a block of code, confirm the old version is actually deleted, not left
   running alongside the new one.
-- Scope reconciliation-style features precisely before building — "orphaned occurrences" was
-  buildable in one session; "the full mid-cycle reconciliation system" was not, and trying to
-  build the whole thing at once would likely have repeated earlier sessions' rushed-fix
-  mistakes.
+- Scope reconciliation-style or structural-change features precisely before building — agree
+  the exact rule in plain language first (as with the "structural edit resets the split plan"
+  rule), then implement it, rather than discovering edge cases mid-build.
