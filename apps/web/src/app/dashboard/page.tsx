@@ -362,19 +362,31 @@ export default function DashboardPage() {
             <p className="text-3xl font-bold text-white mt-1">${totalBills.toFixed(2)}</p>
           </div>
           <div className="sm:border-l sm:border-zinc-700 sm:pl-4">
-            <p className="text-xs uppercase tracking-wide text-zinc-400">
-              {currentPeriod
-                ? `Remaining (thru ${new Date(currentPeriod.end).toLocaleDateString(undefined, { timeZone: "UTC"})})`
-                : "Remaining"}
-            </p>
-            <p
-              className={`text-3xl font-bold mt-1 ${
-                periodRemaining < 0 ? "text-red-400" : "text-primary"
-              }`}
-            >
-              ${periodRemaining.toFixed(2)}
-            </p>
-          </div>
+  <p className="text-xs uppercase tracking-wide text-zinc-400">
+    {currentPeriod
+      ? `Remaining (thru ${new Date(currentPeriod.end).toLocaleDateString(undefined, { timeZone: "UTC"})})`
+      : "Remaining"}
+  </p>
+  {(() => {
+    const periodTotal = currentPeriod ? currentPeriod.income : totalIncome;
+    const usedRatio = periodTotal > 0 ? (periodTotal - periodRemaining) / periodTotal : 0;
+    const isNegative = periodRemaining < 0;
+    const isTight = !isNegative && usedRatio > 0.8;
+
+    const colorClass = isNegative
+      ? "text-red-400"
+      : isTight
+      ? "text-yellow-400"
+      : "text-primary";
+
+    return (
+      <p className={`text-3xl font-bold mt-1 flex items-center gap-2 ${colorClass}`}>
+        ${periodRemaining.toFixed(2)}
+        {(isNegative || isTight) && <AlertTriangle size={20} />}
+      </p>
+    );
+  })()}
+</div>
         </div>
 
         {totalIncome > 0 && (
