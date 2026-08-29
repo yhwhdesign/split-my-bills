@@ -11,6 +11,12 @@ export interface Bill {
   fundingModel: "BEFORE_DUE" | "NEXT_CHECK";
 }
 
+export interface IncomeSourceInput {
+  amount: number;
+  paySchedule: PaySchedule;
+  anchorDate: Date;
+}
+
 export function isCashflowRisk(bill: Bill, availableIncome: number): boolean {
   return bill.amount > availableIncome;
 }
@@ -121,6 +127,14 @@ function retreatPayDate(date: Date, schedule: PaySchedule): Date {
   return prev;
 }
 
+function isSameCalendarDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
 export function projectBillDueDates(dueDate: number, windowDays: number = 60): Date[] {
   const dates: Date[] = [];
   const today = new Date();
@@ -138,12 +152,82 @@ export function projectBillDueDates(dueDate: number, windowDays: number = 60): D
   return dates;
 }
 
+/**
+ * Merges every income source's own real payday sequence into one combined,
+ * chronologically sorted timeline. If two sources happen to pay on the exact
+ * same calendar day, that day appears once, with both amounts summed —
+ * never as two separate zero-length periods.
+ */
+export function getCombinedPayDates(
+  incomeSources: IncomeSourceInput[],
+  windowDays: number = 60,
+  includeMostRecentPast: boolean = true
+): { date: Date; income: number }[] {
+  const tagged: { date: Date; amount: number }[] = [];
+
+  for (const source of incomeSources) {
+    const dates = getUpcomingPayDates(
+      source.paySchedule,
+      source.anchorDate,
+      windowDays,
+      includeMostRecentPast
+    );
+    for (const date of dates) {
+      tagged.push({ date, amount: source.amount });
+    }
+  }
+
+  tagged.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+  const merged: { date: Date; income: number }[] = [];
+  for (const item of tagged) {
+    const last = merged[merged.length - 1];
+    if (last && isSameCalendarDay(last.date, item.date)) {
+      last.income += item.amount;
+    } else {
+      merged.push({ date: item.date, income: item.amount });
+    }
+  }
+
+  return merged;
+}
+
+/**
+ * Same idea as getCombinedPayDates, but for a specific past/future date range
+ * (used by split-payment date selection) rather than "from today forward."
+ * Returns plain dates — split payments divide a bill's amount in half
+ * regardless of which income source's paycheck lands on a given date.
+ */
+export function getCombinedPayDatesInRange(
+  incomeSources: IncomeSourceInput[],
+  rangeStart: Date,
+  rangeEnd: Date
+): Date[] {
+  const all: Date[] = [];
+  for (const source of incomeSources) {
+    all.push(...getPayDatesInRange(source.paySchedule, source.anchorDate, rangeStart, rangeEnd));
+  }
+
+  all.sort((a, b) => a.getTime() - b.getTime());
+
+  const deduped: Date[] = [];
+  for (const date of all) {
+    const last = deduped[deduped.length - 1];
+    if (!last || !isSameCalendarDay(last, date)) {
+      deduped.push(date);
+    }
+  }
+
+  return deduped;
+}
+
 export interface PayPeriod {
   start: Date;
   end: Date;
   payDate: Date;
   income: number;
   isThreePaycheckMonth: boolean;
+  bonusPaycheckLabels: string[];
   bills: { bill: Bill; dueDate: Date }[];
   totalBillAmount: number;
   isCashflowRisk: boolean;
@@ -162,20 +246,70 @@ export interface PaidOccurrence {
 }
 
 export function calculatePayPeriods(
-  incomeAmount: number,
-  paySchedule: PaySchedule,
-  anchorDate: Date,
+  incomeSources: IncomeSourceInput[],
   bills: Bill[],
-  windowDays: number = 60,
+  windowDays: number = 90,
   splitOverrides: SplitPaymentOverride[] = [],
   paidOccurrences: PaidOccurrence[] = []
 ): PayPeriod[] {
-  const payDates = getUpcomingPayDates(paySchedule, anchorDate, windowDays, true);
-  const monthGroups = groupPayDatesByMonth(payDates);
+  const combined = getCombinedPayDates(incomeSources, windowDays, true);
+  const payDates = combined.map((c) => c.date);
 
-  const threePaycheckMonthKeys = new Set(
-    monthGroups.filter((g) => g.isThreePaycheckMonth).map((g) => g.month)
-  );
+  // An "extra paycheck" is schedule-specific: biweekly normally produces
+  // 2/month, occasionally 3 (the 3rd is labeled "3PD"); weekly normally
+  // produces 4/month, occasionally 5 (the 5th is labeled "5PD"). Semimonthly
+  // and monthly always produce the same count every month, so they never
+  // qualify. Only the SPECIFIC occurrence(s) beyond a source's normal count
+  // get tagged — e.g. in a 3-paycheck month, only the 3rd biweekly check is
+  // "extra"; the first two are ordinary paychecks. Evaluated completely
+  // independently per source, so a weekly bonus never affects a biweekly
+  // date or vice versa. If two sources both land their own bonus on the
+  // exact same calendar day, that day carries both labels.
+  const extraPaycheckThreshold = (schedule: PaySchedule): number | null => {
+    switch (schedule) {
+      case "BIWEEKLY":
+        return 3;
+      case "WEEKLY":
+        return 5;
+      case "SEMIMONTHLY":
+      case "MONTHLY":
+        return null;
+    }
+  };
+
+  const dayKey = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+  const bonusLabelsByDate = new Map<string, Set<string>>();
+
+  for (const source of incomeSources) {
+    const threshold = extraPaycheckThreshold(source.paySchedule);
+    if (threshold === null) continue;
+
+    // Widen the window here specifically — a month sitting near the edge of
+    // the normal period-generation window could have its bonus payday fall
+    // just past the cutoff, undercounting it. Padding by 45 extra days
+    // guarantees any month we might report on is fully captured.
+    const sourceDates = getUpcomingPayDates(
+      source.paySchedule,
+      source.anchorDate,
+      windowDays + 45,
+      true
+    );
+
+    const label = `${threshold}PD`;
+    for (const group of groupPayDatesByMonth(sourceDates)) {
+      if (group.payDates.length < threshold) continue;
+      const normalCount = threshold - 1;
+      const bonusDates = group.payDates.slice(normalCount);
+      for (const d of bonusDates) {
+        const key = dayKey(d);
+        const existing = bonusLabelsByDate.get(key) ?? new Set<string>();
+        existing.add(label);
+        bonusLabelsByDate.set(key, existing);
+      }
+    }
+  }
 
   const overriddenBillIds = new Set(splitOverrides.map((o) => o.billId));
 
@@ -203,8 +337,6 @@ export function calculatePayPeriods(
       i + 1 < payDates.length
         ? payDates[i + 1]
         : new Date(start.getTime() + 1000 * 60 * 60 * 24 * 30);
-
-    const monthKey = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}`;
 
     const billsInPeriod: { bill: Bill; dueDate: Date }[] = [];
 
@@ -244,14 +376,17 @@ export function calculatePayPeriods(
     }
 
     const totalBillAmount = billsInPeriod.reduce((sum, b) => sum + b.bill.amount, 0);
-    const shortfall = totalBillAmount - incomeAmount;
+    const periodIncome = combined[i].income;
+    const shortfall = totalBillAmount - periodIncome;
+    const bonusPaycheckLabels = Array.from(bonusLabelsByDate.get(dayKey(start)) ?? []);
 
     periods.push({
       start,
       end,
       payDate: start,
-      income: incomeAmount,
-      isThreePaycheckMonth: threePaycheckMonthKeys.has(monthKey),
+      income: periodIncome,
+      isThreePaycheckMonth: bonusPaycheckLabels.length > 0,
+      bonusPaycheckLabels,
       bills: billsInPeriod,
       totalBillAmount,
       isCashflowRisk: shortfall > 0,
@@ -334,6 +469,7 @@ export interface OpportunitySuggestion {
   payDate: Date;
   extraAmount: number;
   reasoning: string;
+  bonusPaycheckLabels: string[];
 }
 
 export function generateOpportunitySuggestions(periods: PayPeriod[]): OpportunitySuggestion[] {
@@ -349,7 +485,7 @@ export function generateOpportunitySuggestions(periods: PayPeriod[]): Opportunit
 
     // Look ahead: is there a leaner period coming up (income covers bills, but with little room)?
     const nextPeriod = periods[i + 1];
-    let reasoning = `This is a 3-paycheck month — you have an extra $${period.income.toFixed(2)} paycheck this period beyond your usual bills, leaving about $${surplus.toFixed(2)} free.`;
+    let reasoning = `This is an extra paycheck this month — you have $${period.income.toFixed(2)} beyond your usual bills this period, leaving about $${surplus.toFixed(2)} free.`;
 
     if (nextPeriod && !nextPeriod.isThreePaycheckMonth) {
       reasoning += ` Consider setting some aside as a buffer, or prepaying a splittable bill ahead of schedule, so the next regular pay period (starting ${nextPeriod.payDate.toDateString()}) feels lighter.`;
@@ -362,6 +498,7 @@ export function generateOpportunitySuggestions(periods: PayPeriod[]): Opportunit
       payDate: period.payDate,
       extraAmount: surplus,
       reasoning,
+      bonusPaycheckLabels: period.bonusPaycheckLabels,
     });
   }
 
@@ -387,15 +524,20 @@ export function nextOccurrenceOnOrAfter(dueDate: number, afterDate: Date): Date 
   return occurrence;
 }
 
+/**
+ * Picks the two dates that fund a split bill, drawing from the FULL combined
+ * pool of every income source's real paydays — not just one person's
+ * schedule. Anchored to the bill's due date, not today's date, so it works
+ * correctly regardless of when someone happens to open the app.
+ */
 export function pickSplitDates(
   dueDate: Date,
-  paySchedule: PaySchedule,
-  anchorDate: Date
+  incomeSources: IncomeSourceInput[]
 ): [Date, Date] {
   const rangeStart = new Date(dueDate);
   rangeStart.setDate(rangeStart.getDate() - 60);
 
-  const payDates = getPayDatesInRange(paySchedule, anchorDate, rangeStart, dueDate);
+  const payDates = getCombinedPayDatesInRange(incomeSources, rangeStart, dueDate);
   const chosen = payDates.slice(-2);
 
   return [chosen[0] ?? dueDate, chosen[1] ?? chosen[0] ?? dueDate];
@@ -403,14 +545,13 @@ export function pickSplitDates(
 
 export function planBillSplit(
   bill: Bill,
-  paySchedule: PaySchedule,
-  anchorDate: Date,
+  incomeSources: IncomeSourceInput[],
   windowDays: number = 90
 ): SplitPlan {
   const dueDates = projectBillDueDates(bill.dueDate, windowDays);
   const dueDate = dueDates[0];
 
-  const [firstDate, secondDate] = pickSplitDates(dueDate, paySchedule, anchorDate);
+  const [firstDate, secondDate] = pickSplitDates(dueDate, incomeSources);
 
   const half = bill.amount / 2;
   const makePayment = (date: Date): SplitPaymentPlan => ({
@@ -458,12 +599,26 @@ export interface UnresolvedOccurrence {
 
 export function findUnresolvedOccurrences(
   bills: Bill[],
-  paySchedule: PaySchedule,
-  anchorDate: Date,
+  incomeSources: IncomeSourceInput[],
   earliestPeriodStart: Date,
   paidOccurrences: PaidOccurrence[]
 ): UnresolvedOccurrence[] {
-  const lookbackStart = retreatPayDate(earliestPeriodStart, paySchedule);
+  // Retreat one cycle using whichever source has the shortest pay frequency —
+  // the most conservative (narrowest) lookback window across all sources,
+  // so we don't accidentally look back further than any single source's
+  // own "one cycle" would mean.
+  const cycleLengthDays: Record<PaySchedule, number> = {
+    WEEKLY: 7,
+    BIWEEKLY: 14,
+    SEMIMONTHLY: 15,
+    MONTHLY: 30,
+  };
+  const shortestSchedule = incomeSources.reduce((shortest, source) =>
+    cycleLengthDays[source.paySchedule] < cycleLengthDays[shortest.paySchedule]
+      ? source
+      : shortest
+  );
+  const lookbackStart = retreatPayDate(earliestPeriodStart, shortestSchedule.paySchedule);
 
   const isPaidOccurrence = (billId: string, date: Date) =>
     paidOccurrences.some(
@@ -483,8 +638,8 @@ export function findUnresolvedOccurrences(
 
     let assignmentDate = dueDate;
     if (bill.fundingModel === "NEXT_CHECK") {
-      const payDatesInRange = getPayDatesInRange(paySchedule, anchorDate, lookbackStart, earliestPeriodStart);
-      const funding = payDatesInRange.find((pd) => pd >= dueDate);
+      const combinedInRange = getCombinedPayDatesInRange(incomeSources, lookbackStart, earliestPeriodStart);
+      const funding = combinedInRange.find((pd) => pd >= dueDate);
       if (funding) assignmentDate = funding;
     }
 
