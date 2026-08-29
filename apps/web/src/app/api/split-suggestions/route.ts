@@ -1,4 +1,4 @@
-import { calculatePayPeriods, generateSplitSuggestions, generateOpportunitySuggestions, getCurrentOccurrence, findUnresolvedOccurrences, type Bill, type PaySchedule, type SplitPaymentOverride, type PaidOccurrence } from "@split-my-bills/shared";
+import { calculatePayPeriods, generateSplitSuggestions, generateOpportunitySuggestions, getCurrentOccurrence, findUnresolvedOccurrences, type Bill, type PaySchedule, type SplitPaymentOverride, type PaidOccurrence, type IncomeSourceInput } from "@split-my-bills/shared";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/session";
@@ -17,7 +17,13 @@ export async function GET() {
     return NextResponse.json({ periods: [] });
   }
 
-  const primaryIncome = incomeSources[0];
+  // Every income source is treated equally — no "primary" schedule drives
+  // the app. All real paydays from every source fund all bills together.
+  const incomeInputs: IncomeSourceInput[] = incomeSources.map((i) => ({
+    amount: Number(i.amount),
+    paySchedule: i.frequency as PaySchedule,
+    anchorDate: i.nextPayDate,
+  }));
 
   // Backfill any missing recurring-split pairs before we read payment data,
   // so newly generated pairs are reflected in this same request.
@@ -29,8 +35,7 @@ export async function GET() {
           dueDate: bill.dueDate,
           amount: Number(bill.amount),
         },
-        primaryIncome.frequency as PaySchedule,
-        primaryIncome.nextPayDate
+        incomeInputs
       );
     }
   }
@@ -61,10 +66,6 @@ export async function GET() {
   }
   const splitOverrides = Array.from(overridesByBill.values());
 
-  // For now, sum all income sources into one combined amount per the user's primary pay schedule.
-  // (Multiple income sources with different schedules is a real future refinement — noted, not solved here.)
-  const totalIncome = incomeSources.reduce((sum, i) => sum + Number(i.amount), 0);
-
   const paidPayments = await prisma.payment.findMany({
     where: {
       bill: { userId },
@@ -87,11 +88,9 @@ export async function GET() {
   }));
 
   const periods = calculatePayPeriods(
-    totalIncome,
-    primaryIncome.frequency as PaySchedule,
-    primaryIncome.nextPayDate,
+    incomeInputs,
     sharedBills,
-    60,
+    90,
     splitOverrides,
     paidOccurrences
   );
@@ -99,8 +98,7 @@ export async function GET() {
   const needsReview = periods.length > 0
     ? findUnresolvedOccurrences(
         sharedBills,
-        primaryIncome.frequency as PaySchedule,
-        primaryIncome.nextPayDate,
+        incomeInputs,
         periods[0].start,
         paidOccurrences
       )

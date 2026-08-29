@@ -435,9 +435,11 @@ export default function DashboardPage() {
                   <div>
                     <div className="font-medium">
                       {new Date(p.payDate).toLocaleDateString(undefined, { timeZone: "UTC"})}
-                      {p.isThreePaycheckMonth && (
-                        <span className="ml-2 text-xs text-primary">3-paycheck month</span>
-                      )}
+                      {p.bonusPaycheckLabels?.map((label: string) => (
+                        <span key={label} className="ml-2 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-0.5 tracking-wide align-middle">
+                          {label}
+                          </span>
+                      ))}
                     </div>
                     <div className="text-muted-foreground text-xs">
                       {p.bills.length} bill{p.bills.length !== 1 ? "s" : ""} — $
@@ -508,13 +510,19 @@ export default function DashboardPage() {
         <Card className="border-primary/30 bg-primary/5 shadow-sm py-6">
           <CardHeader>
             <CardTitle>Extra Paycheck Opportunities</CardTitle>
-            <CardDescription>Months with a 3rd paycheck — good chances to get ahead</CardDescription>
+            <CardDescription>An extra paycheck this pay cycle — good chances to get ahead</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {opportunities.map((o, idx) => (
               <div key={idx} className="rounded-md border border-primary/20 bg-background p-3 text-sm">
-                <div className="font-medium">{new Date(o.payDate).toLocaleDateString(undefined, { timeZone: "UTC"})}</div>
-                <p className="text-muted-foreground text-xs mt-1">{o.reasoning}</p>
+                <div className="font-medium flex items-center gap-2">
+                  {new Date(o.payDate).toLocaleDateString(undefined, { timeZone: "UTC"})}
+                  {o.bonusPaycheckLabels?.map((label: string) => (
+                    <span key={label} className="rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-0.5 tracking-wide">
+                      {label}
+                    </span>
+                  ))}
+                </div>
               </div>
             ))}
           </CardContent>

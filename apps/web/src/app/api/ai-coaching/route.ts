@@ -7,6 +7,7 @@ import {
   generateOpportunitySuggestions,
   type Bill,
   type PaySchedule,
+  type IncomeSourceInput,
 } from "@split-my-bills/shared";
 import { getAIProvider } from "@/lib/ai/get-provider";
 import { canMakeAICall, recordAICall, hashCoachingInput } from "@/lib/ai/usage-governor";
@@ -23,7 +24,12 @@ export async function GET() {
     return NextResponse.json({ coaching: null });
   }
 
-  const totalIncome = incomeSources.reduce((sum, i) => sum + Number(i.amount), 0);
+  const incomeInputs: IncomeSourceInput[] = incomeSources.map((i) => ({
+    amount: Number(i.amount),
+    paySchedule: i.frequency as PaySchedule,
+    anchorDate: i.nextPayDate,
+  }));
+
   const sharedBills: Bill[] = bills.map((b) => ({
     id: b.id,
     name: b.name,
@@ -33,30 +39,25 @@ export async function GET() {
     fundingModel: b.fundingModel,
   }));
 
-  const periods = calculatePayPeriods(
-    totalIncome,
-    user.paySchedule as PaySchedule,
-    user.paydayAnchor,
-    sharedBills
-  );
+  const periods = calculatePayPeriods(incomeInputs, sharedBills);
   const splitSuggestions = generateSplitSuggestions(periods);
   const opportunitySuggestions = generateOpportunitySuggestions(periods);
 
   const inputData = {
-  periods: periods.map((p) => ({
-    isCashflowRisk: p.isCashflowRisk,
-    shortfall: p.shortfall,
-    totalBillAmount: p.totalBillAmount,
-  })),
-  splitSuggestions,
-  opportunitySuggestions,
-};
-const currentHash = hashCoachingInput(inputData);
+    periods: periods.map((p) => ({
+      isCashflowRisk: p.isCashflowRisk,
+      shortfall: p.shortfall,
+      totalBillAmount: p.totalBillAmount,
+    })),
+    splitSuggestions,
+    opportunitySuggestions,
+  };
+  const currentHash = hashCoachingInput(inputData);
 
-const cached = await prisma.aICoachingCache.findUnique({ where: { userId } });
-if (cached && cached.dataHash === currentHash) {
-  return NextResponse.json({ coaching: cached.coaching });
-}
+  const cached = await prisma.aICoachingCache.findUnique({ where: { userId } });
+  if (cached && cached.dataHash === currentHash) {
+    return NextResponse.json({ coaching: cached.coaching });
+  }
 
   const allowed = await canMakeAICall();
   if (!allowed) {
@@ -64,12 +65,13 @@ if (cached && cached.dataHash === currentHash) {
       coaching: null,
       limitReached: true,
     });
-}
+  }
 
-const provider = getAIProvider();
+  const provider = getAIProvider();
 
-try {
-  const coaching = await provider.generateCoaching({      periods: periods.map((p) => ({
+  try {
+    const coaching = await provider.generateCoaching({
+      periods: periods.map((p) => ({
         payDate: p.payDate.toISOString(),
         isCashflowRisk: p.isCashflowRisk,
         shortfall: p.shortfall,
@@ -95,10 +97,10 @@ try {
 
     await recordAICall();
     await prisma.aICoachingCache.upsert({
-  where: { userId },
-  create: { userId, dataHash: currentHash, coaching },
-  update: { dataHash: currentHash, coaching },
-});
+      where: { userId },
+      create: { userId, dataHash: currentHash, coaching },
+      update: { dataHash: currentHash, coaching },
+    });
     return NextResponse.json({ coaching });
   } catch (error) {
     console.error("AI coaching generation failed:", error);

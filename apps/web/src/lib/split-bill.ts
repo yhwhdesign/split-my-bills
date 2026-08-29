@@ -1,6 +1,12 @@
 import { prisma } from "@/lib/prisma";
-//import { planBillSplit, type Bill, type PaySchedule } from "@split-my-bills/shared";
-import { planBillSplit, pickSplitDates, nextOccurrenceOnOrAfter, type PaySchedule, type Bill } from "@split-my-bills/shared";
+import {
+  planBillSplit,
+  pickSplitDates,
+  nextOccurrenceOnOrAfter,
+  type PaySchedule,
+  type Bill,
+  type IncomeSourceInput,
+} from "@split-my-bills/shared";
 
 export async function createBillSplit(billId: string, userId: string) {
   const bill = await prisma.bill.findUnique({ where: { id: billId } });
@@ -15,7 +21,12 @@ export async function createBillSplit(billId: string, userId: string) {
   if (incomeSources.length === 0) {
     throw new Error("No income source found");
   }
-  const primaryIncome = incomeSources[0];
+
+  const incomeInputs: IncomeSourceInput[] = incomeSources.map((i) => ({
+    amount: Number(i.amount),
+    paySchedule: i.frequency as PaySchedule,
+    anchorDate: i.nextPayDate,
+  }));
 
   const sharedBill: Bill = {
     id: bill.id,
@@ -26,11 +37,7 @@ export async function createBillSplit(billId: string, userId: string) {
     fundingModel: bill.fundingModel,
   };
 
-  const plan = planBillSplit(
-    sharedBill,
-    primaryIncome.frequency as PaySchedule,
-    primaryIncome.nextPayDate
-  );
+  const plan = planBillSplit(sharedBill, incomeInputs);
 
   const splitGroupId = crypto.randomUUID();
 
@@ -64,8 +71,7 @@ export async function createBillSplit(billId: string, userId: string) {
 
 export async function ensureRecurringSplits(
   bill: { id: string; dueDate: number; amount: number },
-  paySchedule: PaySchedule,
-  anchorDate: Date,
+  incomeSources: IncomeSourceInput[],
   windowDays: number = 60
 ) {
   const existingLegs = await prisma.payment.findMany({
@@ -100,7 +106,7 @@ export async function ensureRecurringSplits(
   const created: { splitGroupId: string }[] = [];
 
   while (nextTarget <= windowEnd) {
-    const [firstDate, secondDate] = pickSplitDates(nextTarget, paySchedule, anchorDate);
+    const [firstDate, secondDate] = pickSplitDates(nextTarget, incomeSources);
     const splitGroupId = crypto.randomUUID();
     const half = bill.amount / 2;
 
