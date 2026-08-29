@@ -39,6 +39,7 @@ import {
 import { Logo } from "@/components/logo";
 import { InstallPrompt } from "@/components/install-prompt";
 import { suggestCategory } from "@/lib/categorize-bill";
+import { EditIncomeModal } from "@/components/edit-income-modal";
 
 type IncomeSource = {
   id: string;
@@ -190,15 +191,18 @@ export default function DashboardPage() {
     loadData();
   }
 
-  async function handleUpdateIncome(id: string, amount: string) {
-    await fetch(`/api/income/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount: Number(amount) }),
-    });
-    setEditingIncomeId(null);
-    loadData();
-  }
+  async function handleUpdateIncome(
+  id: string,
+  updates: { name: string; amount: number; frequency: string; nextPayDate: string }
+) {
+  await fetch(`/api/income/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updates),
+  });
+  setEditingIncomeId(null);
+  loadData();
+}
 
   async function handleUpdateBill(
     id: string,
@@ -249,6 +253,7 @@ export default function DashboardPage() {
 
   const needsReviewBillIds = new Set(needsReview.map((n) => n.billId));
   const editingBill = bills.find((b) => b.id === editingBillId) ?? null;
+  const editingIncome = income.find((i) => i.id === editingIncomeId) ?? null;
 
   const totalIncome = income.reduce(
     (sum, i) => sum + normalizeToMonthly(Number(i.amount), i.frequency as PaySchedule),
@@ -539,31 +544,21 @@ export default function DashboardPage() {
               <div key={i.id} className="flex items-start justify-between gap-2 text-sm border-b pb-2">
                 <span className="font-medium min-w-0 break-words flex-1">{i.name}</span>
                 <div className="flex items-center gap-2 shrink-0">
-                  {editingIncomeId === i.id ? (
-                    <EditAmountForm
-                      initialValue={i.amount}
-                      onSave={(val) => handleUpdateIncome(i.id, val)}
-                      onCancel={() => setEditingIncomeId(null)}
-                    />
-                  ) : (
-                    <>
-                      <span className="font-semibold min-w-[70px] text-right inline-block">
-                        ${Number(i.amount).toFixed(2)}
-                      </span>
-                      <button
-                        onClick={() => setEditingIncomeId(i.id)}
-                        className="text-muted-foreground/50 hover:text-primary transition-colors"
-                      >
-                        <Pencil size={14} />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteIncome(i.id)}
-                        className="text-muted-foreground/50 hover:text-destructive transition-colors"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </>
-                  )}
+                  <span className="font-semibold min-w-[70px] text-right inline-block">
+  ${Number(i.amount).toFixed(2)}
+</span>
+<button
+  onClick={() => setEditingIncomeId(i.id)}
+  className="text-muted-foreground/50 hover:text-primary transition-colors"
+>
+  <Pencil size={14} />
+</button>
+<button
+  onClick={() => handleDeleteIncome(i.id)}
+  className="text-muted-foreground/50 hover:text-destructive transition-colors"
+>
+  <Trash2 size={14} />
+</button>
                 </div>
               </div>
             ))}
@@ -779,6 +774,14 @@ export default function DashboardPage() {
           onSave={(updates) => handleUpdateBill(editingBill.id, updates)}
         />
       )}
+
+      {editingIncome && (
+  <EditIncomeModal
+    income={editingIncome}
+    onClose={() => setEditingIncomeId(null)}
+    onSave={(updates) => handleUpdateIncome(editingIncome.id, updates)}
+  />
+)}
     </main>
   );
 }
