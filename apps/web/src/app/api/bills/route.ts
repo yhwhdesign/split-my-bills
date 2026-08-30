@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-//import { verifySessionToken } from "@/lib/auth";
-//import { cookies } from "next/headers";
 import { getCurrentUserId } from "@/lib/session";
 import { createBillSplit } from "@/lib/split-bill";
-import { getCurrentOccurrence, projectBillDueDates } from "@split-my-bills/shared";
+import { getCurrentOccurrence, nextOccurrenceOnOrAfter } from "@split-my-bills/shared";
 
 export async function GET() {
   const userId = await getCurrentUserId();
@@ -18,7 +16,7 @@ export async function GET() {
     },
   });
 
-    const billsWithStatus = bills.map((b) => {
+  const billsWithStatus = bills.map((b) => {
     const occurrenceDueDate = getCurrentOccurrence(b.dueDate);
     const occStart = new Date(
       occurrenceDueDate.getFullYear(),
@@ -44,16 +42,44 @@ export async function GET() {
 
     const currentOccurrence = getCurrentOccurrence(b.dueDate);
 
-    const isOverdue = hasActiveSplit
-      ? currentOccurrence < new Date() &&
-        !b.payments.some(
-          (p) =>
-            p.isSplitPayment &&
-            p.status === "PAID" &&
-            p.paidDate &&
-            p.paidDate >= currentOccurrence
-        )
-      : !paidThisMonth && currentOccurrence < new Date();
+    let isOverdue: boolean;
+
+    if (b.splittable) {
+      // Split legs are always dated BEFORE the due date they fund (that's
+      // the whole point — paying ahead from the two most recent checks),
+      // so comparing a leg's own date against the due date can never
+      // resolve "overdue." Instead: figure out which due-date occurrence
+      // each splitGroupId actually funds (same logic ensureRecurringSplits
+      // uses to extend forward), and check whether the group funding THIS
+      // cycle's occurrence is fully paid.
+      const groups = new Map<string, typeof b.payments>();
+      for (const p of b.payments) {
+        if (!p.isSplitPayment || !p.splitGroupId) continue;
+        const arr = groups.get(p.splitGroupId) ?? [];
+        arr.push(p);
+        groups.set(p.splitGroupId, arr);
+      }
+
+      let currentCycleFunded = false;
+      for (const legs of groups.values()) {
+        const dated = legs.filter((l) => l.paidDate);
+        if (dated.length === 0) continue;
+        const maxLegDate = new Date(Math.max(...dated.map((l) => l.paidDate!.getTime())));
+        const fundedDueDate = nextOccurrenceOnOrAfter(b.dueDate, maxLegDate);
+        const sameCycle =
+          fundedDueDate.getFullYear() === currentOccurrence.getFullYear() &&
+          fundedDueDate.getMonth() === currentOccurrence.getMonth() &&
+          fundedDueDate.getDate() === currentOccurrence.getDate();
+        if (sameCycle && legs.every((l) => l.status === "PAID")) {
+          currentCycleFunded = true;
+          break;
+        }
+      }
+
+      isOverdue = currentOccurrence < new Date() && !currentCycleFunded;
+    } else {
+      isOverdue = !paidThisMonth && currentOccurrence < new Date();
+    }
 
     return {
       ...b,
