@@ -293,6 +293,7 @@ export default function DashboardPage() {
   const editingBill = bills.find((b) => b.id === editingBillId) ?? null;
   const editingIncome = income.find((i) => i.id === editingIncomeId) ?? null;
   const menuBill = bills.find((b) => b.id === menuBillId) ?? null;
+  const billsNeedingAttention = bills.filter((b) => b.isOverdue).length;
 
   const totalIncome = income.reduce(
     (sum, i) => sum + normalizeToMonthly(Number(i.amount), i.frequency as PaySchedule),
@@ -306,6 +307,18 @@ export default function DashboardPage() {
   const periodRemaining = currentPeriod
     ? currentPeriod.income - currentPeriod.totalBillAmount
     : totalIncome - totalBills;
+
+  const actualSpentSoFar = bills.reduce((sum, b) => {
+    // Split bills need their own splitGroupId-based occurrence matching
+    // (same logic isOverdue uses) to correctly determine "is the current
+    // leg-pair paid" — scoped out for now, tracked as a follow-up, same as
+    // how "paid a different amount" itself started with non-split bills.
+    if (b.hasActiveSplit) return sum;
+    if (!b.paidThisMonth) return sum;
+    return sum + Number(b.paidAmount ?? b.amount);
+  }, 0);
+
+  const actualRemaining = currentPeriod ? currentPeriod.income - actualSpentSoFar : null;
 
   if (loading) {
     return <main className="p-8">Loading...</main>;
@@ -399,6 +412,15 @@ export default function DashboardPage() {
           <div className="sm:border-l sm:border-zinc-700 sm:pl-4">
             <p className="text-xs uppercase tracking-wide text-zinc-400">Total Bills</p>
             <p className="text-3xl font-bold text-white mt-1">${totalBills.toFixed(2)}</p>
+            <p className="text-xs mt-2">
+              {billsNeedingAttention === 0 ? (
+                <span className="text-primary">✓ All bills paid</span>
+              ) : (
+                <span className="text-red-400">
+                  {billsNeedingAttention} bill{billsNeedingAttention !== 1 ? "s" : ""} past due
+                </span>
+              )}
+            </p>
           </div>
           <div className="sm:border-l sm:border-zinc-700 sm:pl-4">
             <p className="text-xs uppercase tracking-wide text-zinc-400">
@@ -419,10 +441,17 @@ export default function DashboardPage() {
                 : "text-primary";
 
               return (
-                <p className={`text-3xl font-bold mt-1 flex items-center gap-2 ${colorClass}`}>
-                  ${periodRemaining.toFixed(2)}
-                  {(isNegative || isTight) && <AlertTriangle size={20} />}
-                </p>
+                <>
+                  <p className={`text-3xl font-bold mt-1 flex items-center gap-2 ${colorClass}`}>
+                    ${periodRemaining.toFixed(2)}
+                    {(isNegative || isTight) && <AlertTriangle size={20} />}
+                  </p>
+                  {actualRemaining !== null && (
+                    <p className="text-xs text-zinc-500 mt-2">
+                      Actual so far: <span className="text-zinc-300">${actualRemaining.toFixed(2)}</span>
+                    </p>
+                  )}
+                </>
               );
             })()}
           </div>
