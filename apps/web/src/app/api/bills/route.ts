@@ -17,30 +17,29 @@ export async function GET() {
   });
 
   const billsWithStatus = bills.map((b) => {
-    const occurrenceDueDate = getCurrentOccurrence(b.dueDate);
-    const occStart = new Date(
-      occurrenceDueDate.getFullYear(),
-      occurrenceDueDate.getMonth(),
-      occurrenceDueDate.getDate()
-    );
-    const occEnd = new Date(occStart);
-    occEnd.setDate(occEnd.getDate() + 1);
+    const currentOccurrence = getCurrentOccurrence(b.dueDate);
 
-    const paidThisMonth = b.payments.some(
+    // Matched by calendar day (UTC components), not an exact timestamp
+    // range — local dev and production can construct "midnight" a few
+    // hours apart depending on server timezone, and an exact-range match
+    // can miss a row created in the other environment.
+    const matchingPaid = b.payments.find(
       (p) =>
         p.status === "PAID" &&
         !p.isSplitPayment &&
         p.paidDate &&
-        p.paidDate >= occStart &&
-        p.paidDate < occEnd
+        p.paidDate.getUTCFullYear() === currentOccurrence.getFullYear() &&
+        p.paidDate.getUTCMonth() === currentOccurrence.getMonth() &&
+        p.paidDate.getUTCDate() === currentOccurrence.getDate()
     );
+
+    const paidThisMonth = !!matchingPaid;
+    const paidAmount = matchingPaid ? matchingPaid.amount : null;
 
     const splitPayments = b.payments.filter(
       (p) => p.isSplitPayment && p.status === "SCHEDULED"
     );
     const hasActiveSplit = splitPayments.length > 0;
-
-    const currentOccurrence = getCurrentOccurrence(b.dueDate);
 
     let isOverdue: boolean;
 
@@ -50,8 +49,7 @@ export async function GET() {
       // so comparing a leg's own date against the due date can never
       // resolve "overdue." Instead: figure out which due-date occurrence
       // each splitGroupId actually funds (same logic ensureRecurringSplits
-      // uses to extend forward), and check whether the group funding THIS
-      // cycle's occurrence is fully paid.
+      // uses), and check whether the group funding THIS cycle is fully paid.
       const groups = new Map<string, typeof b.payments>();
       for (const p of b.payments) {
         if (!p.isSplitPayment || !p.splitGroupId) continue;
@@ -84,6 +82,7 @@ export async function GET() {
     return {
       ...b,
       paidThisMonth,
+      paidAmount,
       isOverdue,
       hasActiveSplit,
       hasLateSplit: splitPayments.some((p) => p.isLate),
@@ -97,7 +96,8 @@ export async function POST(request: NextRequest) {
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { name, amount, dueDate, category, splittable, fundingModel } = await request.json();
+  const { name, amount, dueDate, category, splittable, fundingModel, isRecurring, markPaidNow } =
+    await request.json();
 
   if (!name || !amount || !dueDate) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -112,6 +112,9 @@ export async function POST(request: NextRequest) {
       category: category || null,
       splittable: !!splittable,
       fundingModel: fundingModel === "NEXT_CHECK" ? "NEXT_CHECK" : "BEFORE_DUE",
+      // Defaults to true (normal bills) unless explicitly set to false —
+      // a "quick spend" entry is the one case that sends isRecurring: false.
+      isRecurring: isRecurring === false ? false : true,
     },
   });
 
@@ -127,6 +130,21 @@ export async function POST(request: NextRequest) {
           ? "Bill added, but couldn't auto-split yet — add an income source first, then split it manually."
           : "Bill added, but auto-split failed. You can try splitting it manually.";
     }
+  }
+
+  // A "quick spend" represents something that already happened — mark it
+  // paid immediately, for today, at the amount entered, so it's never
+  // shown as an open obligation to review.
+  if (markPaidNow) {
+    await prisma.payment.create({
+      data: {
+        billId: bill.id,
+        amount: bill.amount,
+        paidDate: new Date(),
+        status: "PAID",
+        isSplitPayment: false,
+      },
+    });
   }
 
   return NextResponse.json({ bill, splitWarning }, { status: 201 });
