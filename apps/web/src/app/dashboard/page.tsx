@@ -7,7 +7,7 @@ import { PayBillMenu } from "@/components/pay-bill-menu";
 import { SplitSquareHorizontal, AlertTriangle, HelpCircle, Menu, Info, LogOut, MoreVertical } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { normalizeToMonthly, type PaySchedule } from "@split-my-bills/shared";
+import { normalizeToMonthly, getPayDatesInRange, type PaySchedule } from "@split-my-bills/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -68,6 +68,7 @@ type Bill = {
   fundingModel: "BEFORE_DUE" | "NEXT_CHECK";
   paidThisMonth: boolean;
   paidAmount: string | null;
+  isRecurring: boolean;
   hasActiveSplit: boolean;
   hasLateSplit: boolean;
   payments: SplitPaymentLeg[];
@@ -101,6 +102,8 @@ export default function DashboardPage() {
   const [userName, setUserName] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [legendOpen, setLegendOpen] = useState(false);
+  const [pastDueModalOpen, setPastDueModalOpen] = useState(false);
+  const [dueModalOpen, setDueModalOpen] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -295,6 +298,16 @@ export default function DashboardPage() {
   const menuBill = bills.find((b) => b.id === menuBillId) ?? null;
   const billsNeedingAttention = bills.filter((b) => b.isOverdue).length;
 
+  // Recurring bills occur once every calendar month by definition, so every
+  // recurring bill counts toward "this month's total" regardless of exactly
+  // when its due date falls. One-time Quick Spend entries (isRecurring:
+  // false) are deliberately excluded here — they're a single historical
+  // event already reflected in "Actual so far" spending, not an ongoing
+  // monthly obligation.
+  const totalBillsThisMonth = bills
+    .filter((b) => b.isRecurring)
+    .reduce((sum, b) => sum + Number(b.amount), 0);
+
   const totalIncome = income.reduce(
     (sum, i) => sum + normalizeToMonthly(Number(i.amount), i.frequency as PaySchedule),
     0
@@ -302,21 +315,79 @@ export default function DashboardPage() {
 
   const rawIncomeTotal = income.reduce((sum, i) => sum + Number(i.amount), 0);
 
+  const now = new Date();
+  const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const endOfYearUTC = new Date(Date.UTC(now.getUTCFullYear(), 11, 31));
+  const startOfMonthUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+
+  const projectedIncomeToYearEnd = income.reduce((sum, i) => {
+    const dates = getPayDatesInRange(
+      i.frequency as PaySchedule,
+      new Date(i.nextPayDate),
+      todayUTC,
+      endOfYearUTC
+    );
+    return sum + dates.length * Number(i.amount);
+  }, 0);
+
+  const endOfMonthUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0));
+  const incomeThisMonth = income.reduce((sum, i) => {
+    const dates = getPayDatesInRange(
+      i.frequency as PaySchedule,
+      new Date(i.nextPayDate),
+      startOfMonthUTC,
+      endOfMonthUTC
+    );
+    return sum + dates.length * Number(i.amount);
+  }, 0);
+
   const totalBills = bills.reduce((sum, b) => sum + Number(b.amount), 0);
   const currentPeriod = periods.length > 0 ? periods[0] : null;
   const periodRemaining = currentPeriod
     ? currentPeriod.income - currentPeriod.totalBillAmount
     : totalIncome - totalBills;
 
-  const actualSpentSoFar = bills.reduce((sum, b) => {
-    // Split bills need their own splitGroupId-based occurrence matching
-    // (same logic isOverdue uses) to correctly determine "is the current
-    // leg-pair paid" — scoped out for now, tracked as a follow-up, same as
-    // how "paid a different amount" itself started with non-split bills.
-    if (b.hasActiveSplit) return sum;
-    if (!b.paidThisMonth) return sum;
-    return sum + Number(b.paidAmount ?? b.amount);
-  }, 0);
+  // "Due before next payday" combines two different things that both
+  // represent money still owed before the next check: bills still assigned
+  // to the current period (forward-looking, not yet overdue) AND bills
+  // that have already fallen out of every period entirely because their
+  // occurrence is genuinely overdue (needsReview) — without this, a truly
+  // past-due bill would show as "$0 due" simply because periods only ever
+  // contain upcoming, not-yet-elapsed occurrences.
+  const dueBeforeNextPaydayCount = (currentPeriod?.bills.length ?? 0) + needsReview.length;
+  const dueBeforeNextPaydayAmount =
+    (currentPeriod?.totalBillAmount ?? 0) + needsReview.reduce((sum, n) => sum + n.amount, 0);
+
+  const endOfNextMonthUTC = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 2, 0)
+  );
+  const projectedRemainingThruNextMonth = periods
+    .filter((p) => new Date(p.start) <= endOfNextMonthUTC)
+    .reduce((sum, p) => sum + (p.income - p.totalBillAmount), 0);
+
+  const actualSpentSoFar = currentPeriod
+    ? bills.reduce((sum, b) => {
+        // Split bills need their own splitGroupId-based occurrence matching
+        // (same logic isOverdue uses) — scoped out for now, tracked as a
+        // follow-up, same as "paid a different amount" starting non-split.
+        if (b.hasActiveSplit) return sum;
+        if (!b.paidThisMonth) return sum;
+
+        // Only count this payment if it genuinely falls within the CURRENT
+        // pay period's own date range — "paid this calendar month" and
+        // "belongs to this specific pay period" are different things (a
+        // bill could be paid this month but assigned to a different
+        // period, or be a past, already-elapsed overdue payment).
+        const paidRow = b.payments.find((p) => p.status === "PAID" && !p.isSplitPayment);
+        if (!paidRow || !paidRow.paidDate) return sum;
+        const paidDate = new Date(paidRow.paidDate);
+        if (paidDate < new Date(currentPeriod.start) || paidDate >= new Date(currentPeriod.end)) {
+          return sum;
+        }
+
+        return sum + Number(b.paidAmount ?? b.amount);
+      }, 0)
+    : 0;
 
   const actualRemaining = currentPeriod ? currentPeriod.income - actualSpentSoFar : null;
 
@@ -403,35 +474,44 @@ export default function DashboardPage() {
       <div className="rounded-2xl bg-zinc-900 p-6 sm:p-8 shadow-lg">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-4">
           <div>
-            <p className="text-xs uppercase tracking-wide text-zinc-400">Monthly Income ( Projected)</p>
-            <p className="text-3xl font-bold text-white mt-1">${totalIncome.toFixed(2)}</p>
+            <p className="text-xs uppercase tracking-wide text-zinc-400">Projected Income (thru Dec 31)</p>
+            <p className="text-3xl font-bold text-white mt-1">${projectedIncomeToYearEnd.toFixed(2)}</p>
             <p className="text-xs text-zinc-500 mt-2">
-              Per Paycheck (As Entered): <span className="text-zinc-300">${rawIncomeTotal.toFixed(2)}</span>
+              This month: <span className="text-zinc-300">${incomeThisMonth.toFixed(2)}</span>
             </p>
           </div>
           <div className="sm:border-l sm:border-zinc-700 sm:pl-4">
-            <p className="text-xs uppercase tracking-wide text-zinc-400">Total Bills</p>
-            <p className="text-3xl font-bold text-white mt-1">${totalBills.toFixed(2)}</p>
-            <p className="text-xs mt-2">
+            <p className="text-xs uppercase tracking-wide text-zinc-400">Total Bills This Month</p>
+            <p className="text-3xl font-bold text-white mt-1">${totalBillsThisMonth.toFixed(2)}</p>
+            {currentPeriod && (
+              <button
+                onClick={() => setDueModalOpen(true)}
+                className="text-xs text-zinc-500 mt-2 underline decoration-dotted hover:text-zinc-300 text-left"
+              >
+                Due before next payday: <span className="text-zinc-300">{dueBeforeNextPaydayCount} bill{dueBeforeNextPaydayCount !== 1 ? "s" : ""}, ${dueBeforeNextPaydayAmount.toFixed(2)}</span>
+              </button>
+            )}
+            <p className="text-xs mt-1">
               {billsNeedingAttention === 0 ? (
                 <span className="text-primary">✓ All bills paid</span>
               ) : (
-                <span className="text-red-400">
+                <button
+                  onClick={() => setPastDueModalOpen(true)}
+                  className="text-red-400 underline decoration-dotted hover:text-red-300"
+                >
                   {billsNeedingAttention} bill{billsNeedingAttention !== 1 ? "s" : ""} past due
-                </span>
+                </button>
               )}
             </p>
           </div>
           <div className="sm:border-l sm:border-zinc-700 sm:pl-4">
             <p className="text-xs uppercase tracking-wide text-zinc-400">
-              {currentPeriod
-                ? `Remaining (thru ${new Date(currentPeriod.end).toLocaleDateString(undefined, { timeZone: "UTC"})})`
-                : "Remaining"}
+              Projected Remaining (thru {endOfNextMonthUTC.toLocaleDateString(undefined, { timeZone: "UTC" })})
             </p>
             {(() => {
               const periodTotal = currentPeriod ? currentPeriod.income : totalIncome;
               const usedRatio = periodTotal > 0 ? (periodTotal - periodRemaining) / periodTotal : 0;
-              const isNegative = periodRemaining < 0;
+              const isNegative = projectedRemainingThruNextMonth < 0;
               const isTight = !isNegative && usedRatio > 0.8;
 
               const colorClass = isNegative
@@ -443,11 +523,16 @@ export default function DashboardPage() {
               return (
                 <>
                   <p className={`text-3xl font-bold mt-1 flex items-center gap-2 ${colorClass}`}>
-                    ${periodRemaining.toFixed(2)}
+                    ${projectedRemainingThruNextMonth.toFixed(2)}
                     {(isNegative || isTight) && <AlertTriangle size={20} />}
                   </p>
-                  {actualRemaining !== null && (
+                  {currentPeriod && (
                     <p className="text-xs text-zinc-500 mt-2">
+                      This payday to next: <span className="text-zinc-300">${periodRemaining.toFixed(2)}</span>
+                    </p>
+                  )}
+                  {actualRemaining !== null && (
+                    <p className="text-xs text-zinc-500 mt-1">
                       Actual so far: <span className="text-zinc-300">${actualRemaining.toFixed(2)}</span>
                     </p>
                   )}
@@ -871,6 +956,98 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {dueModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setDueModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-lg border bg-background p-5 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-lg">Due Before Next Payday</h2>
+              <button
+                onClick={() => setDueModalOpen(false)}
+                className="text-muted-foreground/60 hover:text-foreground transition-colors"
+                aria-label="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="space-y-2">
+              {currentPeriod?.bills.map((item: any, i: number) => (
+                <div key={`period-${i}`} className="flex items-center justify-between text-sm border-b pb-2">
+                  <span className="font-medium">{item.bill.name}</span>
+                  <span className="font-semibold">${item.bill.amount.toFixed(2)}</span>
+                </div>
+              ))}
+              {needsReview.map((n) => (
+                <div key={`review-${n.billId}`} className="flex items-center justify-between text-sm border-b pb-2">
+                  <span className="font-medium flex items-center gap-1">
+                    <HelpCircle size={13} className="text-blue-500" />
+                    {n.billName}
+                  </span>
+                  <span className="font-semibold">${n.amount.toFixed(2)}</span>
+                </div>
+              ))}
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full mt-4"
+              onClick={() => setDueModalOpen(false)}
+            >
+              Close
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {pastDueModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setPastDueModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-lg border bg-background p-5 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-lg">Bills Past Due</h2>
+              <button
+                onClick={() => setPastDueModalOpen(false)}
+                className="text-muted-foreground/60 hover:text-foreground transition-colors"
+                aria-label="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="space-y-2">
+              {bills
+                .filter((b) => b.isOverdue)
+                .map((b) => (
+                  <div
+                    key={b.id}
+                    className="flex items-center justify-between text-sm border-b pb-2"
+                  >
+                    <span className="font-medium">{b.name}</span>
+                    <span className="font-semibold">${Number(b.amount).toFixed(2)}</span>
+                  </div>
+                ))}
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full mt-4"
+              onClick={() => setPastDueModalOpen(false)}
+            >
+              Close
+            </Button>
+          </div>
+        </div>
+      )}
 
       {editingBill && (
         <EditBillModal

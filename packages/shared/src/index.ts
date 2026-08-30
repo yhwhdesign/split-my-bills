@@ -31,9 +31,19 @@ export function getUpcomingPayDates(
   const payDates: Date[] = [];
   const today = new Date();
   const endWindow = new Date(today);
-  endWindow.setDate(endWindow.getDate() + windowDays);
+  endWindow.setUTCDate(endWindow.getUTCDate() + windowDays);
 
+  // Normalize to the most recent occurrence on/before today first, whether
+  // the stored anchor itself happens to be in the past or the future.
+  // Without this, a perfectly normal future-dated "next pay date" (e.g.
+  // someone's actual upcoming paycheck) would cause this function to skip
+  // right past a real prior payday, since it previously only ever walked
+  // FORWARD from the anchor and had no way to discover an earlier one.
   let current = new Date(anchorDate);
+  while (current > today) {
+    current = retreatPayDate(current, paySchedule);
+  }
+
   let lastBeforeToday: Date | null = null;
 
   while (current < today) {
@@ -63,7 +73,7 @@ export function groupPayDatesByMonth(payDates: Date[]): PayMonthGroup[] {
   const groups = new Map<string, Date[]>();
 
   for (const date of payDates) {
-    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    const key = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(date);
   }
@@ -80,23 +90,23 @@ function advancePayDate(date: Date, schedule: PaySchedule): Date {
 
   switch (schedule) {
     case "WEEKLY":
-      next.setDate(next.getDate() + 7);
+      next.setUTCDate(next.getUTCDate() + 7);
       break;
     case "BIWEEKLY":
-      next.setDate(next.getDate() + 14);
+      next.setUTCDate(next.getUTCDate() + 14);
       break;
     case "MONTHLY":
-      next.setMonth(next.getMonth() + 1);
+      next.setUTCMonth(next.getUTCMonth() + 1);
       break;
     case "SEMIMONTHLY":
       // Semimonthly is trickier — typically the 1st and 15th of each month,
       // not a fixed number of days apart. We advance by ~15 days as an approximation,
       // then snap to whichever is closer: the 1st or the 15th.
-      if (next.getDate() < 15) {
-        next.setDate(15);
+      if (next.getUTCDate() < 15) {
+        next.setUTCDate(15);
       } else {
-        next.setMonth(next.getMonth() + 1);
-        next.setDate(1);
+        next.setUTCMonth(next.getUTCMonth() + 1);
+        next.setUTCDate(1);
       }
       break;
   }
@@ -108,20 +118,20 @@ function retreatPayDate(date: Date, schedule: PaySchedule): Date {
   const prev = new Date(date);
   switch (schedule) {
     case "WEEKLY":
-      prev.setDate(prev.getDate() - 7);
+      prev.setUTCDate(prev.getUTCDate() - 7);
       break;
     case "BIWEEKLY":
-      prev.setDate(prev.getDate() - 14);
+      prev.setUTCDate(prev.getUTCDate() - 14);
       break;
     case "MONTHLY":
-      prev.setMonth(prev.getMonth() - 1);
+      prev.setUTCMonth(prev.getUTCMonth() - 1);
       break;
     case "SEMIMONTHLY":
-      if (prev.getDate() > 1 && prev.getDate() <= 15) {
-        prev.setMonth(prev.getMonth() - 1);
-        prev.setDate(1);
+      if (prev.getUTCDate() > 1 && prev.getUTCDate() <= 15) {
+        prev.setUTCMonth(prev.getUTCMonth() - 1);
+        prev.setUTCDate(1);
       } else {
-        prev.setDate(15);
+        prev.setUTCDate(15);
       }
       break;
   }
@@ -130,9 +140,9 @@ function retreatPayDate(date: Date, schedule: PaySchedule): Date {
 
 function isSameCalendarDay(a: Date, b: Date): boolean {
   return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
+    a.getUTCFullYear() === b.getUTCFullYear() &&
+    a.getUTCMonth() === b.getUTCMonth() &&
+    a.getUTCDate() === b.getUTCDate()
   );
 }
 
@@ -140,14 +150,14 @@ export function projectBillDueDates(dueDate: number, windowDays: number = 60): D
   const dates: Date[] = [];
   const today = new Date();
   const endWindow = new Date(today);
-  endWindow.setDate(endWindow.getDate() + windowDays);
+  endWindow.setUTCDate(endWindow.getUTCDate() + windowDays);
 
-  const cursor = new Date(today.getFullYear(), today.getMonth(), dueDate);
-  if (cursor < today) cursor.setMonth(cursor.getMonth() + 1);
+  const cursor = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), dueDate));
+  if (cursor < today) cursor.setUTCMonth(cursor.getUTCMonth() + 1);
 
   while (cursor <= endWindow) {
     dates.push(new Date(cursor));
-    cursor.setMonth(cursor.getMonth() + 1);
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
   }
 
   return dates;
@@ -279,7 +289,7 @@ export function calculatePayPeriods(
   };
 
   const dayKey = (d: Date) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
 
   const bonusLabelsByDate = new Map<string, Set<string>>();
 
@@ -318,22 +328,39 @@ export function calculatePayPeriods(
     paidOccurrences.some(
       (p) =>
         p.billId === billId &&
-        p.date.getFullYear() === date.getFullYear() &&
-        p.date.getMonth() === date.getMonth() &&
-        p.date.getDate() === date.getDate()
+        p.date.getUTCFullYear() === date.getUTCFullYear() &&
+        p.date.getUTCMonth() === date.getUTCMonth() &&
+        p.date.getUTCDate() === date.getUTCDate()
     );
 
   const billDueDates = bills
     .filter((bill) => !overriddenBillIds.has(bill.id))
-    .map((bill) => ({
-      bill,
+    .map((bill) => {
       // A non-recurring bill (a one-time "quick spend") should only ever
       // have ONE relevant occurrence — the current cycle's — not repeat
       // forever the way a normal recurring bill's due date does.
-      dates: bill.isRecurring
+      const projected = bill.isRecurring
         ? projectBillDueDates(bill.dueDate, windowDays)
-        : [getCurrentOccurrence(bill.dueDate)],
-    }));
+        : [getCurrentOccurrence(bill.dueDate)];
+
+      // Always also consider the CURRENT cycle's occurrence as a placement
+      // candidate, even if it's already overdue relative to today —
+      // projectBillDueDates() is forward-only and would otherwise skip
+      // straight to next month, leaving a genuinely still-outstanding
+      // overdue bill invisible to every period entirely.
+      const current = getCurrentOccurrence(bill.dueDate);
+      const alreadyIncluded = projected.some(
+        (d) =>
+          d.getUTCFullYear() === current.getUTCFullYear() &&
+          d.getUTCMonth() === current.getUTCMonth() &&
+          d.getUTCDate() === current.getUTCDate()
+      );
+
+      return {
+        bill,
+        dates: alreadyIncluded ? projected : [current, ...projected],
+      };
+    });
 
   const periods: PayPeriod[] = [];
 
@@ -371,7 +398,7 @@ export function calculatePayPeriods(
               id: override.billId,
               name: `${override.billName} (split payment)`,
               amount: payment.amount,
-              dueDate: payment.date.getDate(),
+              dueDate: payment.date.getUTCDate(),
               splittable: false,
               fundingModel: "BEFORE_DUE",
               isRecurring: true,
@@ -524,9 +551,9 @@ export interface SplitPlan {
 }
 
 export function nextOccurrenceOnOrAfter(dueDate: number, afterDate: Date): Date {
-  const occurrence = new Date(afterDate.getFullYear(), afterDate.getMonth(), dueDate);
+  const occurrence = new Date(Date.UTC(afterDate.getUTCFullYear(), afterDate.getUTCMonth(), dueDate));
   if (occurrence < afterDate) {
-    occurrence.setMonth(occurrence.getMonth() + 1);
+    occurrence.setUTCMonth(occurrence.getUTCMonth() + 1);
   }
   return occurrence;
 }
@@ -542,7 +569,7 @@ export function pickSplitDates(
   incomeSources: IncomeSourceInput[]
 ): [Date, Date] {
   const rangeStart = new Date(dueDate);
-  rangeStart.setDate(rangeStart.getDate() - 60);
+  rangeStart.setUTCDate(rangeStart.getUTCDate() - 60);
 
   const payDates = getCombinedPayDatesInRange(incomeSources, rangeStart, dueDate);
   const chosen = payDates.slice(-2);
@@ -580,7 +607,7 @@ export function planBillSplit(
 }
 
 export function getCurrentOccurrence(dueDate: number, referenceDate: Date = new Date()): Date {
-  return new Date(referenceDate.getFullYear(), referenceDate.getMonth(), dueDate);
+  return new Date(Date.UTC(referenceDate.getUTCFullYear(), referenceDate.getUTCMonth(), dueDate));
 }
 
 export function getPayDatesInRange(
@@ -620,14 +647,22 @@ export function findUnresolvedOccurrences(
     paidOccurrences.some(
       (p) =>
         p.billId === billId &&
-        p.date.getFullYear() === date.getFullYear() &&
-        p.date.getMonth() === date.getMonth() &&
-        p.date.getDate() === date.getDate()
+        p.date.getUTCFullYear() === date.getUTCFullYear() &&
+        p.date.getUTCMonth() === date.getUTCMonth() &&
+        p.date.getUTCDate() === date.getUTCDate()
     );
 
   const unresolved: UnresolvedOccurrence[] = [];
 
   for (const bill of bills) {
+    // Split bills are deliberately excluded here — this function has no
+    // concept of "half a leg," so it would always report a split bill's
+    // FULL budgeted amount, which is wrong once even one leg is involved.
+    // Split bills already have their own correct, working mechanism (the
+    // per-leg checkboxes, with proper half-amounts), so routing them
+    // through this generic check would double-count and misreport them.
+    if (bill.splittable) continue;
+
     // The CURRENT cycle's occurrence — whether it's already passed or is
     // still upcoming — is what matters here, regardless of how many pay
     // cycles back that puts it. A bill's obligation doesn't disappear just
@@ -639,7 +674,7 @@ export function findUnresolvedOccurrences(
     let assignmentDate = dueDate;
     if (bill.fundingModel === "NEXT_CHECK") {
       const searchEnd = new Date(dueDate);
-      searchEnd.setDate(searchEnd.getDate() + 45);
+      searchEnd.setUTCDate(searchEnd.getUTCDate() + 45);
       const combinedInRange = getCombinedPayDatesInRange(incomeSources, dueDate, searchEnd);
       const funding = combinedInRange.find((pd) => pd >= dueDate);
       if (funding) assignmentDate = funding;
