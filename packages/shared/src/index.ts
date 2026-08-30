@@ -545,11 +545,17 @@ export function pickSplitDates(
 
 export function planBillSplit(
   bill: Bill,
-  incomeSources: IncomeSourceInput[],
-  windowDays: number = 90
+  incomeSources: IncomeSourceInput[]
 ): SplitPlan {
-  const dueDates = projectBillDueDates(bill.dueDate, windowDays);
-  const dueDate = dueDates[0];
+  // Deliberately NOT projectBillDueDates() here — that function always skips
+  // forward past a due date already in the past relative to today, which is
+  // correct for "what's coming up next" but wrong for "which occurrence
+  // should this split fund." A bill added after its due date has already
+  // passed this cycle still needs THIS cycle's occurrence funded — not
+  // silently pushed to next month. getCurrentOccurrence() always returns
+  // the current month's occurrence regardless of past/future, matching the
+  // same semantics already used for paid-status tracking elsewhere.
+  const dueDate = getCurrentOccurrence(bill.dueDate);
 
   const [firstDate, secondDate] = pickSplitDates(dueDate, incomeSources);
 
@@ -603,23 +609,6 @@ export function findUnresolvedOccurrences(
   earliestPeriodStart: Date,
   paidOccurrences: PaidOccurrence[]
 ): UnresolvedOccurrence[] {
-  // Retreat one cycle using whichever source has the shortest pay frequency —
-  // the most conservative (narrowest) lookback window across all sources,
-  // so we don't accidentally look back further than any single source's
-  // own "one cycle" would mean.
-  const cycleLengthDays: Record<PaySchedule, number> = {
-    WEEKLY: 7,
-    BIWEEKLY: 14,
-    SEMIMONTHLY: 15,
-    MONTHLY: 30,
-  };
-  const shortestSchedule = incomeSources.reduce((shortest, source) =>
-    cycleLengthDays[source.paySchedule] < cycleLengthDays[shortest.paySchedule]
-      ? source
-      : shortest
-  );
-  const lookbackStart = retreatPayDate(earliestPeriodStart, shortestSchedule.paySchedule);
-
   const isPaidOccurrence = (billId: string, date: Date) =>
     paidOccurrences.some(
       (p) =>
@@ -632,13 +621,19 @@ export function findUnresolvedOccurrences(
   const unresolved: UnresolvedOccurrence[] = [];
 
   for (const bill of bills) {
-    const dueDate = nextOccurrenceOnOrAfter(bill.dueDate, lookbackStart);
-    if (dueDate >= earliestPeriodStart) continue; // visible in a real period already, not orphaned
+    // The CURRENT cycle's occurrence — whether it's already passed or is
+    // still upcoming — is what matters here, regardless of how many pay
+    // cycles back that puts it. A bill's obligation doesn't disappear just
+    // because more than one payday has gone by since its due date. This
+    // deliberately has no arbitrary "how far back" cap.
+    const dueDate = getCurrentOccurrence(bill.dueDate);
     if (isPaidOccurrence(bill.id, dueDate)) continue;
 
     let assignmentDate = dueDate;
     if (bill.fundingModel === "NEXT_CHECK") {
-      const combinedInRange = getCombinedPayDatesInRange(incomeSources, lookbackStart, earliestPeriodStart);
+      const searchEnd = new Date(dueDate);
+      searchEnd.setDate(searchEnd.getDate() + 45);
+      const combinedInRange = getCombinedPayDatesInRange(incomeSources, dueDate, searchEnd);
       const funding = combinedInRange.find((pd) => pd >= dueDate);
       if (funding) assignmentDate = funding;
     }

@@ -3,6 +3,7 @@ import {
   planBillSplit,
   pickSplitDates,
   nextOccurrenceOnOrAfter,
+  getCurrentOccurrence,
   type PaySchedule,
   type Bill,
   type IncomeSourceInput,
@@ -98,9 +99,14 @@ export async function ensureRecurringSplits(
   const windowEnd = new Date();
   windowEnd.setDate(windowEnd.getDate() + windowDays);
 
+  // If no split has ever existed for this bill, the FIRST one must target
+  // the current cycle's occurrence — whether it's already past or still
+  // upcoming — not skip forward to next month just because today happens
+  // to be past the due date. Once a real first split exists, walking
+  // forward month-by-month (below) is correct recurring behavior.
   const nextTarget = lastFundedDueDate
     ? new Date(lastFundedDueDate)
-    : nextOccurrenceOnOrAfter(bill.dueDate, new Date());
+    : getCurrentOccurrence(bill.dueDate);
   if (lastFundedDueDate) nextTarget.setMonth(nextTarget.getMonth() + 1);
 
   const created: { splitGroupId: string }[] = [];
