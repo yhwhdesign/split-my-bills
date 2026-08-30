@@ -45,9 +45,9 @@ export async function POST(
     .filter(
       (p) =>
         p.paidDate &&
-        p.paidDate.getUTCFullYear() === occurrenceDueDate.getFullYear() &&
-        p.paidDate.getUTCMonth() === occurrenceDueDate.getMonth() &&
-        p.paidDate.getUTCDate() === occurrenceDueDate.getDate()
+        p.paidDate.getUTCFullYear() === occurrenceDueDate.getUTCFullYear() &&
+        p.paidDate.getUTCMonth() === occurrenceDueDate.getUTCMonth() &&
+        p.paidDate.getUTCDate() === occurrenceDueDate.getUTCDate()
     )
     .map((p) => p.id);
   if (staleIds.length > 0) {
@@ -94,9 +94,9 @@ export async function DELETE(
     .filter(
       (p) =>
         p.paidDate &&
-        p.paidDate.getUTCFullYear() === occurrenceDueDate.getFullYear() &&
-        p.paidDate.getUTCMonth() === occurrenceDueDate.getMonth() &&
-        p.paidDate.getUTCDate() === occurrenceDueDate.getDate()
+        p.paidDate.getUTCFullYear() === occurrenceDueDate.getUTCFullYear() &&
+        p.paidDate.getUTCMonth() === occurrenceDueDate.getUTCMonth() &&
+        p.paidDate.getUTCDate() === occurrenceDueDate.getUTCDate()
     )
     .map((p) => p.id);
 

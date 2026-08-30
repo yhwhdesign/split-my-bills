@@ -367,17 +367,27 @@ export default function DashboardPage() {
 
   const actualSpentSoFar = currentPeriod
     ? bills.reduce((sum, b) => {
-        // Split bills need their own splitGroupId-based occurrence matching
-        // (same logic isOverdue uses) — scoped out for now, tracked as a
-        // follow-up, same as "paid a different amount" starting non-split.
-        if (b.hasActiveSplit) return sum;
+        if (b.hasActiveSplit) {
+          // Each split leg carries its own real paid status and date
+          // independently — no need to determine which "cycle" the whole
+          // group belongs to, just sum whichever individual legs are
+          // genuinely paid and fall within the current period.
+          const paidLegsInPeriod = b.payments.filter(
+            (p) =>
+              p.isSplitPayment &&
+              p.status === "PAID" &&
+              p.paidDate &&
+              new Date(p.paidDate) >= new Date(currentPeriod.start) &&
+              new Date(p.paidDate) < new Date(currentPeriod.end)
+          );
+          return sum + paidLegsInPeriod.reduce((s, p) => s + Number(p.amount), 0);
+        }
+
         if (!b.paidThisMonth) return sum;
 
         // Only count this payment if it genuinely falls within the CURRENT
         // pay period's own date range — "paid this calendar month" and
-        // "belongs to this specific pay period" are different things (a
-        // bill could be paid this month but assigned to a different
-        // period, or be a past, already-elapsed overdue payment).
+        // "belongs to this specific pay period" are different things.
         const paidRow = b.payments.find((p) => p.status === "PAID" && !p.isSplitPayment);
         if (!paidRow || !paidRow.paidDate) return sum;
         const paidDate = new Date(paidRow.paidDate);

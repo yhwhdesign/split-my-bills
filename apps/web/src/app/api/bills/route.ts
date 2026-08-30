@@ -28,9 +28,9 @@ export async function GET() {
         p.status === "PAID" &&
         !p.isSplitPayment &&
         p.paidDate &&
-        p.paidDate.getUTCFullYear() === currentOccurrence.getFullYear() &&
-        p.paidDate.getUTCMonth() === currentOccurrence.getMonth() &&
-        p.paidDate.getUTCDate() === currentOccurrence.getDate()
+        p.paidDate.getUTCFullYear() === currentOccurrence.getUTCFullYear() &&
+        p.paidDate.getUTCMonth() === currentOccurrence.getUTCMonth() &&
+        p.paidDate.getUTCDate() === currentOccurrence.getUTCDate()
     );
 
     const paidThisMonth = !!matchingPaid;
@@ -65,9 +65,9 @@ export async function GET() {
         const maxLegDate = new Date(Math.max(...dated.map((l) => l.paidDate!.getTime())));
         const fundedDueDate = nextOccurrenceOnOrAfter(b.dueDate, maxLegDate);
         const sameCycle =
-          fundedDueDate.getFullYear() === currentOccurrence.getFullYear() &&
-          fundedDueDate.getMonth() === currentOccurrence.getMonth() &&
-          fundedDueDate.getDate() === currentOccurrence.getDate();
+          fundedDueDate.getUTCFullYear() === currentOccurrence.getUTCFullYear() &&
+          fundedDueDate.getUTCMonth() === currentOccurrence.getUTCMonth() &&
+          fundedDueDate.getUTCDate() === currentOccurrence.getUTCDate();
         if (sameCycle && legs.every((l) => l.status === "PAID")) {
           currentCycleFunded = true;
           break;
@@ -96,8 +96,7 @@ export async function POST(request: NextRequest) {
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { name, amount, dueDate, category, splittable, fundingModel, isRecurring, markPaidNow } =
-    await request.json();
+  const { name, amount, dueDate, category, splittable, fundingModel } = await request.json();
 
   if (!name || !amount || !dueDate) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -112,9 +111,6 @@ export async function POST(request: NextRequest) {
       category: category || null,
       splittable: !!splittable,
       fundingModel: fundingModel === "NEXT_CHECK" ? "NEXT_CHECK" : "BEFORE_DUE",
-      // Defaults to true (normal bills) unless explicitly set to false —
-      // a "quick spend" entry is the one case that sends isRecurring: false.
-      isRecurring: isRecurring === false ? false : true,
     },
   });
 
@@ -130,21 +126,6 @@ export async function POST(request: NextRequest) {
           ? "Bill added, but couldn't auto-split yet — add an income source first, then split it manually."
           : "Bill added, but auto-split failed. You can try splitting it manually.";
     }
-  }
-
-  // A "quick spend" represents something that already happened — mark it
-  // paid immediately, for today, at the amount entered, so it's never
-  // shown as an open obligation to review.
-  if (markPaidNow) {
-    await prisma.payment.create({
-      data: {
-        billId: bill.id,
-        amount: bill.amount,
-        paidDate: new Date(),
-        status: "PAID",
-        isSplitPayment: false,
-      },
-    });
   }
 
   return NextResponse.json({ bill, splitWarning }, { status: 201 });
