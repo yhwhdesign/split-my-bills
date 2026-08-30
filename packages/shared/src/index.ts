@@ -9,6 +9,7 @@ export interface Bill {
   dueDate: number; // day of month, 1-31
   splittable: boolean;
   fundingModel: "BEFORE_DUE" | "NEXT_CHECK";
+  isRecurring: boolean;
 }
 
 export interface IncomeSourceInput {
@@ -326,7 +327,12 @@ export function calculatePayPeriods(
     .filter((bill) => !overriddenBillIds.has(bill.id))
     .map((bill) => ({
       bill,
-      dates: projectBillDueDates(bill.dueDate, windowDays),
+      // A non-recurring bill (a one-time "quick spend") should only ever
+      // have ONE relevant occurrence — the current cycle's — not repeat
+      // forever the way a normal recurring bill's due date does.
+      dates: bill.isRecurring
+        ? projectBillDueDates(bill.dueDate, windowDays)
+        : [getCurrentOccurrence(bill.dueDate)],
     }));
 
   const periods: PayPeriod[] = [];
@@ -368,6 +374,7 @@ export function calculatePayPeriods(
               dueDate: payment.date.getDate(),
               splittable: false,
               fundingModel: "BEFORE_DUE",
+              isRecurring: true,
             },
             dueDate: payment.date,
           });
