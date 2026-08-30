@@ -3,15 +3,6 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/session";
 import { getCurrentOccurrence } from "@split-my-bills/shared";
 
-function startOfDay(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-}
-function endOfDay(date: Date) {
-  const d = startOfDay(date);
-  d.setDate(d.getDate() + 1);
-  return d;
-}
-
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -91,21 +82,26 @@ export async function DELETE(
 
   const occurrenceDueDate = getCurrentOccurrence(bill.dueDate);
 
-  const recentPayment = await prisma.payment.findFirst({
-    where: {
-      billId,
-      status: "PAID",
-      isSplitPayment: false,
-      paidDate: {
-        gte: startOfDay(occurrenceDueDate),
-        lt: endOfDay(occurrenceDueDate),
-      },
-    },
-    orderBy: { paidDate: "desc" },
+  // Matched by calendar day (not an exact timestamp range) for the same
+  // reason as POST's dedup — local dev and production can construct
+  // "midnight" a few hours apart depending on server timezone. Deletes
+  // every matching row, not just the most recent, so a bill left with a
+  // stray duplicate from that mismatch gets fully cleared in one click.
+  const existingPaid = await prisma.payment.findMany({
+    where: { billId, status: "PAID", isSplitPayment: false },
   });
+  const staleIds = existingPaid
+    .filter(
+      (p) =>
+        p.paidDate &&
+        p.paidDate.getUTCFullYear() === occurrenceDueDate.getFullYear() &&
+        p.paidDate.getUTCMonth() === occurrenceDueDate.getMonth() &&
+        p.paidDate.getUTCDate() === occurrenceDueDate.getDate()
+    )
+    .map((p) => p.id);
 
-  if (recentPayment) {
-    await prisma.payment.delete({ where: { id: recentPayment.id } });
+  if (staleIds.length > 0) {
+    await prisma.payment.deleteMany({ where: { id: { in: staleIds } } });
   }
 
   return NextResponse.json({ success: true });
