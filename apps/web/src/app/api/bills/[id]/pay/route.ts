@@ -25,13 +25,48 @@ export async function POST(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  //const [occurrenceDueDate] = projectBillDueDates(bill.dueDate);
+  // Optional actual-amount override — lets a user record what they really
+  // paid when it differs from the budgeted bill.amount. Falls back to the
+  // budgeted amount if no override is sent, or if it's not a valid
+  // positive number (defend against a malformed/empty body).
+  let actualAmount = Number(bill.amount);
+  try {
+    const body = await request.json();
+    if (body && typeof body.amount === "number" && body.amount > 0) {
+      actualAmount = body.amount;
+    }
+  } catch {
+    // No body sent at all — fine, just use the budgeted amount.
+  }
+
   const occurrenceDueDate = getCurrentOccurrence(bill.dueDate);
+
+  // If this occurrence is already marked paid, remove that row first — this
+  // request either confirms the same payment again or updates the amount.
+  // Matched by calendar day (not an exact timestamp range) because local
+  // dev and production can construct "midnight" a few hours apart
+  // depending on server timezone — an exact-range match can miss an
+  // existing row created in the other environment.
+  const existingPaid = await prisma.payment.findMany({
+    where: { billId, status: "PAID", isSplitPayment: false },
+  });
+  const staleIds = existingPaid
+    .filter(
+      (p) =>
+        p.paidDate &&
+        p.paidDate.getUTCFullYear() === occurrenceDueDate.getFullYear() &&
+        p.paidDate.getUTCMonth() === occurrenceDueDate.getMonth() &&
+        p.paidDate.getUTCDate() === occurrenceDueDate.getDate()
+    )
+    .map((p) => p.id);
+  if (staleIds.length > 0) {
+    await prisma.payment.deleteMany({ where: { id: { in: staleIds } } });
+  }
 
   const payment = await prisma.payment.create({
     data: {
       billId,
-      amount: bill.amount,
+      amount: actualAmount,
       paidDate: occurrenceDueDate,
       status: "PAID",
       isSplitPayment: false,
@@ -54,7 +89,6 @@ export async function DELETE(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  //const [occurrenceDueDate] = projectBillDueDates(bill.dueDate);
   const occurrenceDueDate = getCurrentOccurrence(bill.dueDate);
 
   const recentPayment = await prisma.payment.findFirst({

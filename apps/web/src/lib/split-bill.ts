@@ -36,6 +36,7 @@ export async function createBillSplit(billId: string, userId: string) {
     dueDate: bill.dueDate,
     splittable: bill.splittable,
     fundingModel: bill.fundingModel,
+    isRecurring: bill.isRecurring,
   };
 
   const plan = planBillSplit(sharedBill, incomeInputs);

@@ -37,6 +37,7 @@ export async function GET() {
     dueDate: b.dueDate,
     splittable: b.splittable,
     fundingModel: b.fundingModel,
+    isRecurring: b.isRecurring,
   }));
 
   const periods = calculatePayPeriods(incomeInputs, sharedBills);

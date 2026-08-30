@@ -2,7 +2,9 @@
 
 import { DayOfMonthPicker } from "@/components/day-of-month-picker";
 import { EditBillModal } from "@/components/edit-bill-modal";
-import { SplitSquareHorizontal, AlertTriangle, HelpCircle, Menu, Info, LogOut } from "lucide-react";
+import { EditIncomeModal } from "@/components/edit-income-modal";
+import { PayBillMenu } from "@/components/pay-bill-menu";
+import { SplitSquareHorizontal, AlertTriangle, HelpCircle, Menu, Info, LogOut, MoreVertical } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { normalizeToMonthly, type PaySchedule } from "@split-my-bills/shared";
@@ -39,7 +41,6 @@ import {
 import { Logo } from "@/components/logo";
 import { InstallPrompt } from "@/components/install-prompt";
 import { suggestCategory } from "@/lib/categorize-bill";
-import { EditIncomeModal } from "@/components/edit-income-modal";
 
 type IncomeSource = {
   id: string;
@@ -66,6 +67,7 @@ type Bill = {
   splittable: boolean;
   fundingModel: "BEFORE_DUE" | "NEXT_CHECK";
   paidThisMonth: boolean;
+  paidAmount: string | null;
   hasActiveSplit: boolean;
   hasLateSplit: boolean;
   payments: SplitPaymentLeg[];
@@ -90,6 +92,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [editingIncomeId, setEditingIncomeId] = useState<string | null>(null);
   const [editingBillId, setEditingBillId] = useState<string | null>(null);
+  const [menuBillId, setMenuBillId] = useState<string | null>(null);
   const [expandedPeriod, setExpandedPeriod] = useState<number | null>(null);
   const [reviewingBillId, setReviewingBillId] = useState<string | null>(null);
   const [coaching, setCoaching] = useState<string | null>(null);
@@ -161,6 +164,30 @@ export default function DashboardPage() {
     loadData();
   }
 
+  async function handleQuickSpend(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const formData = new FormData(form);
+    const isRecurring = formData.get("isRecurring") === "on";
+    const today = new Date();
+    await fetch("/api/bills", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: formData.get("name"),
+        amount: Number(formData.get("amount")),
+        dueDate: today.getDate(),
+        category: null,
+        splittable: false,
+        fundingModel: "BEFORE_DUE",
+        isRecurring,
+        markPaidNow: true,
+      }),
+    });
+    form.reset();
+    loadData();
+  }
+
   async function handleAddBill(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = e.currentTarget;
@@ -188,21 +215,22 @@ export default function DashboardPage() {
 
   async function handleDeleteBill(id: string) {
     await fetch(`/api/bills/${id}`, { method: "DELETE" });
+    setMenuBillId(null);
     loadData();
   }
 
   async function handleUpdateIncome(
-  id: string,
-  updates: { name: string; amount: number; frequency: string; nextPayDate: string }
-) {
-  await fetch(`/api/income/${id}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(updates),
-  });
-  setEditingIncomeId(null);
-  loadData();
-}
+    id: string,
+    updates: { name: string; amount: number; frequency: string; nextPayDate: string }
+  ) {
+    await fetch(`/api/income/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    });
+    setEditingIncomeId(null);
+    loadData();
+  }
 
   async function handleUpdateBill(
     id: string,
@@ -231,6 +259,16 @@ export default function DashboardPage() {
     loadData();
   }
 
+  async function handleMarkPaidAmount(billId: string, amount: number) {
+    await fetch(`/api/bills/${billId}/pay`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount }),
+    });
+    setMenuBillId(null);
+    loadData();
+  }
+
   async function handleToggleSplitPaymentPaid(paymentId: string, currentlyPaid: boolean) {
     await fetch(`/api/payments/${paymentId}/pay`, {
       method: currentlyPaid ? "DELETE" : "POST",
@@ -254,6 +292,7 @@ export default function DashboardPage() {
   const needsReviewBillIds = new Set(needsReview.map((n) => n.billId));
   const editingBill = bills.find((b) => b.id === editingBillId) ?? null;
   const editingIncome = income.find((i) => i.id === editingIncomeId) ?? null;
+  const menuBill = bills.find((b) => b.id === menuBillId) ?? null;
 
   const totalIncome = income.reduce(
     (sum, i) => sum + normalizeToMonthly(Number(i.amount), i.frequency as PaySchedule),
@@ -362,31 +401,31 @@ export default function DashboardPage() {
             <p className="text-3xl font-bold text-white mt-1">${totalBills.toFixed(2)}</p>
           </div>
           <div className="sm:border-l sm:border-zinc-700 sm:pl-4">
-  <p className="text-xs uppercase tracking-wide text-zinc-400">
-    {currentPeriod
-      ? `Remaining (thru ${new Date(currentPeriod.end).toLocaleDateString(undefined, { timeZone: "UTC"})})`
-      : "Remaining"}
-  </p>
-  {(() => {
-    const periodTotal = currentPeriod ? currentPeriod.income : totalIncome;
-    const usedRatio = periodTotal > 0 ? (periodTotal - periodRemaining) / periodTotal : 0;
-    const isNegative = periodRemaining < 0;
-    const isTight = !isNegative && usedRatio > 0.8;
+            <p className="text-xs uppercase tracking-wide text-zinc-400">
+              {currentPeriod
+                ? `Remaining (thru ${new Date(currentPeriod.end).toLocaleDateString(undefined, { timeZone: "UTC"})})`
+                : "Remaining"}
+            </p>
+            {(() => {
+              const periodTotal = currentPeriod ? currentPeriod.income : totalIncome;
+              const usedRatio = periodTotal > 0 ? (periodTotal - periodRemaining) / periodTotal : 0;
+              const isNegative = periodRemaining < 0;
+              const isTight = !isNegative && usedRatio > 0.8;
 
-    const colorClass = isNegative
-      ? "text-red-400"
-      : isTight
-      ? "text-yellow-400"
-      : "text-primary";
+              const colorClass = isNegative
+                ? "text-red-400"
+                : isTight
+                ? "text-yellow-400"
+                : "text-primary";
 
-    return (
-      <p className={`text-3xl font-bold mt-1 flex items-center gap-2 ${colorClass}`}>
-        ${periodRemaining.toFixed(2)}
-        {(isNegative || isTight) && <AlertTriangle size={20} />}
-      </p>
-    );
-  })()}
-</div>
+              return (
+                <p className={`text-3xl font-bold mt-1 flex items-center gap-2 ${colorClass}`}>
+                  ${periodRemaining.toFixed(2)}
+                  {(isNegative || isTight) && <AlertTriangle size={20} />}
+                </p>
+              );
+            })()}
+          </div>
         </div>
 
         {totalIncome > 0 && (
@@ -455,7 +494,7 @@ export default function DashboardPage() {
                       {p.bonusPaycheckLabels?.map((label: string) => (
                         <span key={label} className="ml-2 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-0.5 tracking-wide align-middle">
                           {label}
-                          </span>
+                        </span>
                       ))}
                     </div>
                     <div className="text-muted-foreground text-xs">
@@ -557,20 +596,20 @@ export default function DashboardPage() {
                 <span className="font-medium min-w-0 break-words flex-1">{i.name}</span>
                 <div className="flex items-center gap-2 shrink-0">
                   <span className="font-semibold min-w-[70px] text-right inline-block">
-  ${Number(i.amount).toFixed(2)}
-</span>
-<button
-  onClick={() => setEditingIncomeId(i.id)}
-  className="text-muted-foreground/50 hover:text-primary transition-colors"
->
-  <Pencil size={14} />
-</button>
-<button
-  onClick={() => handleDeleteIncome(i.id)}
-  className="text-muted-foreground/50 hover:text-destructive transition-colors"
->
-  <Trash2 size={14} />
-</button>
+                    ${Number(i.amount).toFixed(2)}
+                  </span>
+                  <button
+                    onClick={() => setEditingIncomeId(i.id)}
+                    className="text-muted-foreground/50 hover:text-primary transition-colors"
+                  >
+                    <Pencil size={14} />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteIncome(i.id)}
+                    className="text-muted-foreground/50 hover:text-destructive transition-colors"
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
               </div>
             ))}
@@ -603,6 +642,19 @@ export default function DashboardPage() {
             <CardTitle>Bills</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <form onSubmit={handleQuickSpend} className="rounded-md border border-dashed p-3 space-y-2 bg-muted/30">
+              <p className="text-xs font-medium text-muted-foreground">Quick Spend — log something you already paid</p>
+              <Input name="name" placeholder="What was it?" required />
+              <Input name="amount" type="number" step="0.01" placeholder="Amount" required />
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                <input type="checkbox" name="isRecurring" />
+                This is recurring — add it to my regular budgeted bills
+              </label>
+              <Button type="submit" size="sm" variant="outline" className="w-full font-semibold">
+                Log Expense
+              </Button>
+            </form>
+
             {bills.map((b) => {
               const splitLegs = b.payments.filter((p) => p.isSplitPayment);
               const needsBillReview = needsReviewBillIds.has(b.id);
@@ -654,20 +706,32 @@ export default function DashboardPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className="font-semibold min-w-[70px] text-right inline-block">
-                        ${Number(b.amount).toFixed(2)}
-                      </span>
+                      {b.paidThisMonth && b.paidAmount != null && Number(b.paidAmount) !== Number(b.amount) ? (
+                        (() => {
+                          const paidMore = Number(b.paidAmount) > Number(b.amount);
+                          const colorClass = paidMore ? "text-red-500" : "text-green-600";
+                          return (
+                            <span className="flex flex-col items-end min-w-[70px]">
+                              <span className={`text-xs line-through ${colorClass}`}>
+                                ${Number(b.amount).toFixed(2)}
+                              </span>
+                              <span className={`font-semibold ${colorClass}`}>
+                                ${Number(b.paidAmount).toFixed(2)}
+                              </span>
+                            </span>
+                          );
+                        })()
+                      ) : (
+                        <span className="font-semibold min-w-[70px] text-right inline-block">
+                          ${Number(b.amount).toFixed(2)}
+                        </span>
+                      )}
                       <button
-                        onClick={() => setEditingBillId(b.id)}
+                        onClick={() => setMenuBillId(b.id)}
                         className="text-muted-foreground/50 hover:text-primary transition-colors"
+                        aria-label="Bill options"
                       >
-                        <Pencil size={14} />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteBill(b.id)}
-                        className="text-muted-foreground/50 hover:text-destructive transition-colors"
-                      >
-                        <Trash2 size={14} />
+                        <MoreVertical size={16} />
                       </button>
                     </div>
                   </div>
@@ -731,31 +795,31 @@ export default function DashboardPage() {
             })}
             <form onSubmit={handleAddBill} className="space-y-2 pt-2">
               <Input
-  name="name"
-  placeholder="Bill name"
-  required
-  onChange={(e) => {
-    const suggestion = suggestCategory(e.target.value);
-    const categoryInput = e.currentTarget.form?.elements.namedItem(
-      "category"
-    ) as HTMLInputElement;
-    if (suggestion && categoryInput && !categoryInput.dataset.userEdited) {
-      categoryInput.value = suggestion;
-    }
-  }}
-/>
+                name="name"
+                placeholder="Bill name"
+                required
+                onChange={(e) => {
+                  const suggestion = suggestCategory(e.target.value);
+                  const categoryInput = e.currentTarget.form?.elements.namedItem(
+                    "category"
+                  ) as HTMLInputElement;
+                  if (suggestion && categoryInput && !categoryInput.dataset.userEdited) {
+                    categoryInput.value = suggestion;
+                  }
+                }}
+              />
               <Input name="amount" type="number" step="0.01" placeholder="Amount" required />
               <div>
                 <Label className="text-xs text-muted-foreground">Due date</Label>
                 <DayOfMonthPicker name="dueDate" />
               </div>
               <Input
-  name="category"
-  placeholder="Category (auto-suggested as you type)"
-  onChange={(e) => {
-    e.currentTarget.dataset.userEdited = "true";
-  }}
-/>
+                name="category"
+                placeholder="Category (auto-suggested as you type)"
+                onChange={(e) => {
+                  e.currentTarget.dataset.userEdited = "true";
+                }}
+              />
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" name="splittable" />
                 Splittable into two payments
@@ -767,8 +831,8 @@ export default function DashboardPage() {
                   defaultValue="BEFORE_DUE"
                   className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
                 >
-                <option value="BEFORE_DUE">Paid on time, before it's due</option>
-                <option value="NEXT_CHECK">Paid from my next paycheck, even if that's a few days late</option>
+                  <option value="BEFORE_DUE">Paid on time, before it's due</option>
+                  <option value="NEXT_CHECK">Paid from my next paycheck, even if that's a few days late</option>
                 </select>
               </div>
               <Button type="submit" className="w-full font-semibold">
@@ -788,12 +852,29 @@ export default function DashboardPage() {
       )}
 
       {editingIncome && (
-  <EditIncomeModal
-    income={editingIncome}
-    onClose={() => setEditingIncomeId(null)}
-    onSave={(updates) => handleUpdateIncome(editingIncome.id, updates)}
-  />
-)}
+        <EditIncomeModal
+          income={editingIncome}
+          onClose={() => setEditingIncomeId(null)}
+          onSave={(updates) => handleUpdateIncome(editingIncome.id, updates)}
+        />
+      )}
+
+      {menuBill && (
+        <PayBillMenu
+          bill={menuBill}
+          onClose={() => setMenuBillId(null)}
+          onEdit={() => {
+            setMenuBillId(null);
+            setEditingBillId(menuBill.id);
+          }}
+          onQuickTogglePaid={() => {
+            setMenuBillId(null);
+            handleTogglePaid(menuBill.id, menuBill.paidThisMonth);
+          }}
+          onMarkPaidAmount={(amount) => handleMarkPaidAmount(menuBill.id, amount)}
+          onDelete={() => handleDeleteBill(menuBill.id)}
+        />
+      )}
     </main>
   );
 }
