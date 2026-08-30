@@ -14,55 +14,54 @@ financial-coaching / budget / savings-potential app to help people who don't hav
 Core differentiator: AI-assisted coaching that analyzes a user's income schedule vs. bill due
 dates and suggests whether splitting a bill into two smaller payments (aligned to paydays)
 would ease cashflow strain. A second differentiator: bill due dates and paycheck dates rarely
-line up — the app makes that mismatch visible and manageable, including modeling *how* a bill
-is actually funded (`fundingModel`) and treating every income source in a household equally
-(no "primary" income).
+line up — the app makes that mismatch visible and manageable, modeling *how* a bill is funded
+(`fundingModel`) and treating every income source in a household equally.
 
-As of this session, the app has gone through its **first real day of actual daily use** — and
-that surfaced several genuine, previously-hidden bugs that only show up with real bills and
-real timing, not synthetic test data. All were fixed the same night.
+This session was the app's **first real day of daily use** — which surfaced (and got fixes
+for) more real bugs than any prior session, plus two genuinely new features built directly
+from that real usage.
 
 ---
 
 ## 2. Guardrails / Constraints (do not violate)
 
 - **Net-zero cost.** Every service choice must have a genuinely free tier at our scale.
-- **No billing surprises, ever.** All AI calls route through our server, gated by a Usage
-  Governor.
+- **No billing surprises, ever.**
 - **Version control via GitHub.** Feature branches, merged via PR into `main`. Never commit
   directly to `main`.
-- **Local server must behave like it's live** — reachable from a real phone.
+- **Local server must behave like it's live.**
 - **Built in VS Code.**
 - **Distribution: PWA, not native app stores.**
-- **Monorepo** (Turborepo) — shared logic between web and the PWA.
+- **Monorepo** (Turborepo).
 - **Deployment**: Vercel (free tier), `main` → production. Local dev and production share the
-  SAME Neon database via the same `DATABASE_URL` — test data created locally is immediately
-  visible on the live site. Wipe via Neon's SQL editor after testing sessions.
+  SAME Neon database — wipe via Neon's SQL editor after test sessions.
 - **How users get bill data in: manual entry + user-initiated statement upload only.**
 
 **Important conventions learned the hard way:**
-- Every Next.js 16 App Router dynamic route handler MUST declare `request: NextRequest`
-  (the exact type) as its literal first parameter, even if unused.
+- Every Next.js 16 dynamic route handler needs `request: NextRequest` (exact type) as the
+  literal first parameter, even unused.
 - Always run `npx prisma generate` after schema changes AND fully restart the dev server.
 - **Run `npm run build` locally before every commit/merge to `main`** — `next dev`'s compiler
-  is more lenient and has repeatedly let real errors through undetected.
-- **The generated Prisma client is NOT committed to git** (correctly — it's build output) and
-  will not exist on a fresh checkout unless something regenerates it. `apps/web/package.json`
-  now has `"postinstall": "prisma generate"` so this happens automatically on every install,
-  local or on Vercel. Worth double-checking this script is genuinely a single, correct
-  `"scripts"` block — a duplicate JSON key here silently breaks the fix without any error.
-- **`vercel --prod` run directly via CLI does not reliably respect `.gitignore`** — it can
-  upload the literal working directory, `node_modules` and all. An explicit `.vercelignore`
-  file is the fix, independent of `.gitignore`.
-- A "module export doesn't exist" error that survives a full cache clear may not be a caching
-  issue at all — confirm the file's actual content on disk before assuming it's still a cache
-  problem.
-- **The single most common real bug class in this app has been "forward-only date logic used
-  where 'current cycle, whether past or future' logic was needed."** This has now caused (and
-  been fixed) at least five separate times across different functions — `getCurrentOccurrence()`
-  is the correct tool whenever the real question is "what does this cycle currently owe,"
-  never `projectBillDueDates()` or `nextOccurrenceOnOrAfter()`, which are correct only for
-  "what's coming up next."
+  is more lenient and has repeatedly let real errors through.
+- **The generated Prisma client is NOT committed to git.** `apps/web/package.json` has
+  `"postinstall": "prisma generate"` so this happens automatically on every install. Watch
+  for accidental **duplicate JSON keys** when editing `package.json` — they don't error, they
+  just silently resolve to whichever the parser picks, which can make a fix look like it
+  never applied.
+- **`vercel --prod` via CLI does not reliably respect `.gitignore`.** An explicit
+  `.vercelignore` (node_modules, .next, .turbo, .git) is required independently.
+- **This project's single most recurring bug class: forward-only date logic used where
+  "current cycle, whether past or future" logic was needed.** `getCurrentOccurrence()` is
+  almost always the right tool when the real question is "what does this cycle currently
+  owe" — never `projectBillDueDates()` or `nextOccurrenceOnOrAfter()`, which are correct only
+  for "what's coming up next."
+- **Local dev and Vercel production can disagree on what timezone "midnight" is in**, since
+  date construction like `new Date(year, month, day)` depends on the server's local
+  timezone. This causes the same logical due-date occurrence to be stored as two different
+  timestamps a few hours apart depending on which environment handled the request. Fixed in
+  the specific spots hit this session (paid-status matching) by comparing calendar-day
+  components (UTC-normalized) instead of exact timestamp ranges — but the deeper, fully
+  timezone-independent fix across the whole app is still real, separate future work.
 
 ---
 
@@ -71,16 +70,15 @@ real timing, not synthetic test data. All were fixed the same night.
 | Layer | Choice | Notes |
 |---|---|---|
 | Monorepo tool | **Turborepo** | |
-| Backend | Next.js API routes | No separate backend server |
-| Frontend | **Next.js, built as a PWA** | One codebase |
-| UI components | **shadcn/ui** (indigo/violet accent) | No Dialog component installed — custom overlays built plainly with Tailwind |
+| Backend | Next.js API routes | |
+| Frontend | **Next.js, built as a PWA** | |
+| UI components | **shadcn/ui** (indigo/violet accent) | No Dialog component — custom overlays built plainly with Tailwind |
 | Database | Postgres via Neon | Free tier, scales to zero when idle |
-| ORM | **Prisma 7** | Driver adapters; client auto-generated via `postinstall` |
+| ORM | **Prisma 7** | Client auto-generated via `postinstall` |
 | Validation | Zod | Installed, not yet wired into API routes |
-| Auth | Self-rolled: bcrypt + `jose` JWT, httpOnly cookies | Fully working |
+| Auth | Self-rolled: bcrypt + `jose` JWT, httpOnly cookies | |
 | Route protection | `src/proxy.ts` | |
-| AI Provider (dev) | Ollama (local) | Requires Ollama running locally |
-| AI Provider (production) | Gemini Flash-Lite free tier (governed) | |
+| AI Provider (dev/prod) | Ollama / Gemini Flash-Lite (governed) | |
 | Usage Governor | Custom, built and deployed | |
 | CI | GitHub Actions | Not yet set up |
 
@@ -109,9 +107,14 @@ SplitSuggestion (AI-generated, cached)
     suggested_dates[], confidence, created_at
 ```
 
-**`Payment.amount` is already a separate field from `Bill.amount`** — currently always
-populated with the bill's own budgeted amount when marking paid, but structurally ready for
-the planned "paid a different amount" feature (see Future/Backlog) without a schema change.
+**`Bill.isRecurring` is now actually respected** (it existed in the schema for a long time but
+was never checked anywhere until this session): `calculatePayPeriods()` only projects a
+single current-cycle occurrence for `isRecurring: false` bills, instead of projecting forward
+every month the way a normal recurring bill's due date does. This is what makes "Quick Spend"
+entries genuinely one-time.
+
+**`Payment.amount` can now differ from `Bill.amount`** — used by the "paid a different
+amount" feature; the field always existed, it just wasn't used that way before.
 
 ---
 
@@ -124,149 +127,131 @@ English — it does not do the math.
 
 ## 6. Build Phases
 
-- [x] **Phase 0 — Setup** — complete
-- [x] **Phase 1 — Core MVP** — fully complete
-- [x] **Phase 2 — Split Engine** — fully complete
-- [x] **Phase 3 — AI Coaching Layer** — fully complete, deployed, verified live
-- [x] **Phase 3.5 — Usage Governor** — fully complete and deployed
-- [ ] **Phase 4 — Statement Import & Trend Analysis** — not started
-- [x] **Phase 5 — PWA Polish (core)** — complete and verified on a real iPhone
-- [ ] **Phase 6 — Visual Design System & Polish** — in progress. Shipped: dark hero card,
-  category icons, split-leg sub-row UI, overdue-bill indicator, hamburger menu + Icon Legend,
-  per-bill "needs review" indicator, full bill/income editing modals, bonus-paycheck badges.
-  **Still open, flagged by user as a real UX problem**: the Upcoming Pay Periods card is too
-  data-dense and scroll-heavy on mobile.
-- [ ] **Phase 7 — Savings Guidance (future)** — not scoped in detail.
+- [x] **Phase 0-3.5** — complete, deployed, verified live.
+- [x] **Phase 5 — PWA Polish (core)** — complete and verified on a real iPhone.
+- [ ] **Phase 6 — Visual Design System & Polish** — in progress. Shipped this session: the
+  combined bill-actions menu (`PayBillMenu`), the "paid different amount" visual treatment,
+  the Quick Spend entry form. **Still open, flagged by user as a real UX problem**: the
+  Upcoming Pay Periods card is too data-dense and scroll-heavy on mobile.
+- [ ] **Phase 4, Phase 7** — not started.
 
 **"Current state" reconciliation feature:**
-- [x] Per-bill "needs review" detection for orphaned occurrences — rebuilt this session to
-  remove the one-cycle lookback cap entirely (see below) and fix a real bug in how it found
-  candidate dates.
+- [x] Per-bill "needs review" detection — now uncapped (no arbitrary lookback limit).
 - [ ] Full mid-cycle onboarding reconciliation flow — not built.
 - [ ] End-of-cycle "Did you get paid?" proactive confirmation flow — not built.
 
 ---
 
-## Recently Fixed (2026-08-30 session — first real-world-use bugs, found and fixed same night)
+## Recently Fixed / Built (2026-08-30 session — long, multi-part, first real-world-use day)
 
-This was the app's first day of genuine daily use with real bills, and it surfaced exactly
-the kind of bugs synthetic testing hadn't caught. All fixed the same session:
+**Two deployment bugs:**
+- Vercel builds failing (`Module not found: '@/generated/prisma/client'`) — the generated
+  Prisma client isn't committed to git and nothing regenerated it on a fresh Vercel checkout.
+  Fixed with a `postinstall: "prisma generate"` script (first attempt silently failed from a
+  duplicate JSON `"scripts"` key).
+- `vercel --prod` failing with "File size limit exceeded (100MB)" — `node_modules` was being
+  included in the CLI upload despite `.gitignore`. Fixed with an explicit `.vercelignore`.
 
-**Deployment bugs (unrelated to app logic):**
-- Vercel production builds were failing with `Module not found: Can't resolve
-  '@/generated/prisma/client'`. Root cause: the generated Prisma client isn't committed to
-  git (correctly), and nothing regenerated it on a fresh Vercel checkout — only worked
-  locally because it already existed on disk from prior manual runs. **Fixed** by adding
-  `"postinstall": "prisma generate"` to `apps/web/package.json`. First attempt silently
-  failed because the edit created a **duplicate** `"scripts"` JSON key instead of replacing
-  the original — worth remembering that duplicate JSON keys don't error, they just get
-  silently resolved by whichever parser wins.
-- Separately, `vercel --prod` was failing with "File size limit exceeded (100MB)" —
-  `node_modules` (1GB) was being included in the CLI upload despite being correctly listed in
-  `.gitignore`. The Vercel CLI run directly doesn't reliably respect `.gitignore` the way a
-  git-integrated deploy does. **Fixed** with an explicit `.vercelignore` file.
+**Four related app-logic bugs, all the same root cause (forward-only date logic used where
+current-cycle logic was needed):**
+1. `planBillSplit()` — fixed to use `getCurrentOccurrence()` instead of
+   `projectBillDueDates()[0]`, so a bill split after its due date has already passed this
+   cycle no longer permanently skips that cycle's occurrence.
+2. `ensureRecurringSplits()`'s "no split exists yet" fallback — same fix.
+3. `findUnresolvedOccurrences()` (`needsReview`) — the one-pay-cycle lookback cap was
+   **removed entirely** per the user's explicit real-world need ("I want the ability to mark
+   things paid even IF they are before the previous cycle"); now uses `getCurrentOccurrence()`
+   directly with no arbitrary "how far back" limit.
+4. `isOverdue` for split bills — was comparing raw leg dates against the due date directly
+   (impossible to ever resolve true, since legs are always dated *before* their due date by
+   design). Fixed by grouping legs by `splitGroupId`, determining which occurrence each group
+   actually funds, and checking whether the group funding the *current* cycle is fully paid.
 
-**Four related app-logic bugs, all the same root cause** ("forward-only date logic used where
-'current cycle, whether past or future' logic was needed" — the single most recurring bug
-class in this project):
+**Repair path for bills corrupted by the old buggy logic**: toggle `splittable` off/on in the
+edit modal. One repair attempt showed a stale/wrong month (July) — **parked as a
+not-yet-investigated anomaly**, not chased at the end of a long session.
 
-1. **`planBillSplit()`** picked its due date via `projectBillDueDates()[0]` (forward-only) —
-   meant a bill added or split *after* its due date had already passed this cycle
-   **permanently skipped that cycle's occurrence entirely**, with no `Payment` rows ever
-   created for it. Confirmed via real data (a student loan due the 25th, added the 29th, had
-   zero rows for August, only September onward). **Fixed**: use `getCurrentOccurrence()`
-   instead.
-2. **`ensureRecurringSplits()`** had the identical bug in its "no split exists yet" fallback.
-   **Fixed** the same way.
-3. **`findUnresolvedOccurrences()`** (the `needsReview` feature) had the same bug in a
-   different shape — it computed its candidate date via `nextOccurrenceOnOrAfter(bill.dueDate,
-   lookbackStart)`, which could itself skip forward past the very occurrence it was supposed
-   to catch, meaning the one-cycle lookback wasn't just narrow, it was actually broken for the
-   case it existed to solve. Per the user's explicit real-world need ("I want the ability to
-   mark things paid even IF they are before the previous cycle"), **the one-cycle cap was
-   removed entirely** and replaced with a direct `getCurrentOccurrence()` check — simpler code,
-   no arbitrary "how far back" limit.
-4. **`isOverdue` for split bills** compared raw leg dates against the due date directly, which
-   can never resolve true — split legs are always dated *before* the due date they fund, by
-   design. **Fixed**: group legs by `splitGroupId`, determine which due-date occurrence each
-   group actually funds (same logic `ensureRecurringSplits()` uses), and check whether the
-   group funding the *current* cycle specifically is fully paid.
+**Discovered a significant, previously-invisible timezone bug** while testing "paid a
+different amount": local dev and Vercel production construct "midnight" using different
+server-local timezones, so the same logical due-date occurrence gets stored as two different
+timestamps ~5 hours apart depending on which environment handled the request. This explains a
+pattern of near-duplicate `PAID` rows found throughout the whole bill list. Fixed in the
+specific spots hit this session (day-matching in `GET /api/bills` and the dedup-delete in
+`POST /api/bills/[id]/pay`) by comparing calendar-day components instead of exact timestamp
+ranges — **the deeper, app-wide fix is real, separate future work, not done tonight.**
 
-**Repair path for bills already corrupted by the old buggy logic**: toggle `splittable` off
-then back on in the edit modal (triggers `regenerateSplitsIfNeeded()`, deleting stale legs and
-recreating correctly). Old paid legs left behind by a previous buggy split are harmless — they
-just become non-matching historical rows.
+**Feature 1 — "Paid a different amount," fully built:**
+- `POST /api/bills/[id]/pay` accepts an optional `amount` override, with day-level dedup so
+  re-confirming or updating never creates duplicate `PAID` rows.
+- `GET /api/bills` exposes `paidAmount`.
+- Bills list now shows the budgeted amount struck through — red if paid *more*, green if paid
+  *less* — next to the actual paid amount in that color.
+- UI redesigned mid-session per the user's own instinct: replaced the separate pencil+trash
+  icons with one 3-dot button opening `PayBillMenu` — four flat options (Edit Bill, **Confirm
+  Paid** — one tap at the budgeted amount, **Update Amount** — a small sub-screen for a
+  different amount, Delete Bill). The original single "Mark Paid" sub-screen was one tap too
+  many for the common case; splitting it into a direct action plus a separate "update" path
+  fixed that.
 
-**New, NOT-yet-investigated anomaly, deliberately parked**: applying that repair to one real
-bill showed a stale/wrong month (July) instead of the expected August. Needs fresh
-investigation next session — not chased tonight to avoid a late-session rabbit hole.
+**Feature 2 — "Quick Spend," fully built:**
+- Found and fixed a real prerequisite bug first: `Bill.isRecurring` existed in the schema but
+  was **never actually checked anywhere** — even non-recurring bills projected forward every
+  month. Fixed `calculatePayPeriods()` to respect it (a single current-cycle occurrence only,
+  for non-recurring bills).
+- A small dashed-border "Quick Spend" form at the top of the Bills card: name, amount, and a
+  "this is recurring" checkbox. Always creates the bill and immediately marks it paid *today*
+  (new `markPaidNow` flag on `POST /api/bills`). Unchecked, it never reappears. Checked, it
+  becomes a real, ongoing recurring bill — exactly the auto-create behavior the user
+  specified.
 
 ---
 
 ## Previously Fixed (2026-08-29 session — multi-income-source support)
 
-Full multi-income refactor: no "primary income" concept anywhere. `getCombinedPayDates()` /
-`getCombinedPayDatesInRange()` merge every source's real paydays. Bonus-paycheck badges
-("3PD"/"5PD") tag only the specific extra occurrence, fully independent per source. Forecast
-window widened from 60 to 90 days. Full income-source editing (`EditIncomeModal`).
+Full multi-income refactor, no "primary income" anywhere. Bonus-paycheck badges. Full
+income-source editing.
 
-## Previously Fixed (2026-08-27/28 sessions)
+## Previously Fixed (2026-08-23 through 2026-08-28 sessions)
 
-Full bill editing (`EditBillModal`) with a clear structural-change rule. The first "needs
-review" reconciliation feature. `fundingModel` (BEFORE_DUE/NEXT_CHECK). Final
-`request: NextRequest` route-handler fix.
+Occurrence-based paid tracking, recurring split generation, `fundingModel`, the first "needs
+review" feature, full bill editing, final route-handler typing fix.
 
 ---
 
 ## Known Gaps — Actively Being Worked
 
-- **New anomaly from tonight's repair path**: toggling a bill's splittable status off/on to
+- **New anomaly, not yet investigated**: toggling a bill's splittable status off/on to
   regenerate its splits showed the wrong month (July instead of August) in one real case.
-  Not yet investigated — top priority next session alongside the deferred features below.
-- **Upcoming Pay Periods card needs a mobile UX redesign** — flagged directly by the user.
+- **The app-wide timezone-independence fix** (local dev vs. production constructing
+  "midnight" differently) — patched at the two spots this session actually hit, not fixed
+  everywhere date construction happens.
+- **Upcoming Pay Periods card needs a mobile UX redesign.**
 
 ---
 
 ## Future / Backlog
 
-**Real feature requests from actual daily use (explicitly deferred tonight to avoid a
-late-session rabbit hole — priority items for next session, after the July anomaly):**
-
-- **"Paid a different amount."** Let a user mark a bill paid with an actual amount different
-  from what was budgeted. Display: original amount shown with strikethrough, colored red if
-  paid *more* than budgeted or green if paid *less*, with the new actual amount shown in the
-  same color. UI: user wants a single combined button (merging the current separate
-  edit/delete icons) opening a small menu — "Edit Bill" / "Mark Paid — different amount" /
-  "Delete." **Scope decision already made**: build for non-split (regular) bills first;
-  split-leg support as a fast follow-up, not both at once, since the "per-leg vs. only-once-
-  both-paid" comparison question needs its own thought. `Payment.amount` already exists as a
-  field separate from `Bill.amount` — no schema change needed, just needs to actually be used
-  that way (`POST /api/bills/[id]/pay` currently always copies `bill.amount`).
-- **"Quick spend / misc" one-time expense entry.** A lightweight way to log an unbudgeted
-  one-time expense without it becoming a recurring bill (current due-date projection logic
-  makes every non-split bill implicitly recur monthly regardless of `isRecurring`, so a plain
-  "add a bill" doesn't cleanly support a true one-off). If the user says "yes, make this
-  recurring," **it should automatically create a real recurring Bill** using the same info —
-  explicit user decision, not just a reminder to add one manually later.
-- **"All bills paid" quick-glance indicator** on the hero card (e.g. a green checkmark vs. a
-  red count of overdue bills) — deliberately deferred until the paid-status bugs above are
-  fully fixed and trustworthy, since building a summary on top of not-yet-correct data would
-  likely need to be redone.
+- **Investigate the July/August splittable-toggle anomaly.**
+- **Full timezone-independence pass** across all date construction in the app — the real,
+  underlying fix behind tonight's targeted day-matching patches.
+- **Extend "paid a different amount" to split-bill legs** (built for non-split bills only so
+  far, per the original scope decision).
+- **"All bills paid" quick-glance indicator** on the hero card — now that paid-status data is
+  meaningfully more trustworthy after tonight's fixes, this is closer to buildable.
 - **Full mid-cycle onboarding reconciliation flow** and **end-of-cycle "Did you get paid?"
   confirmation** — remaining pieces of the "current state" concept.
-- **Consolidate duplicate date-equality logic** across a few files into one shared helper.
+- **Upcoming Pay Periods mobile redesign.**
+- **Consolidate duplicate date-equality logic** across files into one shared helper (this
+  session added yet another one — worth doing this consolidation sooner rather than later).
 - **Handle stale/historical split-payment rows in the UI** if a bill ever accumulates split
   history across multiple cycles.
-- **Push notifications**, **spending trend charts**, **"Remaining" card color gradient +
-  warning icon** *(code drafted this session, not yet confirmed applied — verify next time)*,
-  **calendar visualization for pay/due dates**, **collapsible add-forms**, **further settings
-  under the hamburger menu**, **email payment-confirmation scanning (opt-in, read-only Gmail
-  search)**, **budget-tracker checklist view**, **dashboard-as-information-hub
-  restructuring** — all previously logged, unchanged.
-- **Security hardening**: dependency scanning, Zod validation on API routes, re-enable
-  `noUnusedLocals`/`noUnusedParameters` in `tsconfig.json` once the codebase is stable enough.
-- **Consider adopting a real shadcn Dialog component** now that multiple modal-style UI
-  patterns exist (`EditBillModal`, `EditIncomeModal`, the needs-review inline prompt).
+- **Add a note/memo field to Quick Spend entries** — not built this session (would need a
+  schema migration), a nice-to-have follow-up.
+- Previously logged, unchanged: push notifications, spending trend charts, calendar
+  visualization, collapsible add-forms, further hamburger-menu settings, email
+  payment-confirmation scanning, budget-tracker checklist view, dashboard-as-hub
+  restructuring, security hardening (Zod validation, dependency scanning,
+  `noUnusedLocals`/`noUnusedParameters`), a real shadcn Dialog component.
 
 **Design Direction**: BillOut + 1Bill + EveryDollar + Rocket Money references, unchanged.
 
@@ -277,24 +262,22 @@ late-session rabbit hole — priority items for next session, after the July ano
 **Phase:** Phases 0–3.5 fully complete, deployed, verified live. Phase 5 core complete.
 Phase 6 in progress.
 
-**2026-08-30 session:** The app's first real day of daily use surfaced two deployment bugs
-(Prisma client not generating on Vercel; `node_modules` accidentally included in CLI deploys)
-and four related app-logic bugs, all the same root cause: forward-only date logic being used
-in places that actually needed "what does this cycle currently owe, past or future"
-semantics. Fixed all six. Per the user's explicit real-world need, removed the one-pay-cycle
-cap on the `needsReview` lookback entirely, replacing it with a correct, simpler
-implementation. Identified and cleanly scoped three real next features from actual usage
-("paid a different amount," "quick spend," an all-paid quick-glance indicator) but
-deliberately deferred building them tonight to avoid a late-session rabbit hole, after
-discovering a new, not-yet-understood anomaly in the bill-repair path.
+**2026-08-30 session (long, first real-world-use day):** Fixed two deployment bugs and four
+related app-logic bugs (all the same "forward-only date logic" root cause). Discovered a
+significant timezone-mismatch bug between local dev and production during real testing, and
+patched the specific spots it broke. Built two full features directly from real daily-use
+feedback: "paid a different amount" (with a redesigned combined bill-actions menu) and "Quick
+Spend" one-time expense logging (which required fixing a long-standing dormant bug —
+`isRecurring` never being checked — as a prerequisite). Deliberately parked a new anomaly
+(July/August month mismatch in the split-repair path) rather than chase it at the end of a
+long session.
 
-**Known real gap, next up:** investigate the "shows July instead of August" anomaly from the
-splittable-toggle repair path, then build the three deferred features in order (paid-different-
-amount, quick-spend, all-paid indicator).
+**Known real gaps, next up:** the July/August anomaly, the app-wide timezone-independence
+fix, extending "paid a different amount" to split legs, and the Upcoming Pay Periods mobile
+redesign.
 
-**Next: investigate the July/August anomaly first (regression from tonight's fixes, or a
-separate pre-existing issue), then scope and build "paid a different amount" for non-split
-bills.**
+**Next: investigate the July/August anomaly first, then decide between the timezone
+deep-fix, split-leg amount overrides, or the Pay Periods redesign.**
 
 **Last updated:** 2026-08-30
 
@@ -304,14 +287,13 @@ bills.**
 
 | Date | Decision | Reasoning |
 |---|---|---|
-| 2026-07-14 | Web + mobile, shared backend | One codebase covers both platforms |
-| 2026-07-14 | Rules engine + LLM explains (not LLM does math) | Reliability + cost control |
-| 2026-08-23 | Occurrence-based paid tracking distinct from forward-only due-date projection | "Which occurrence is paid" and "what's next" are different questions |
-| 2026-08-26 | Added explicit `Bill.fundingModel` field instead of trying to infer funding behavior | Two real bill-funding behaviors are legitimate but mutually exclusive |
+| 2026-08-23 | Occurrence-based paid tracking distinct from forward-only due-date projection | Different questions: "which occurrence is paid" vs. "what's next" |
 | 2026-08-27 | Scoped the reconciliation feature narrowly to "orphaned occurrences" only | Precise, buildable in one session |
-| 2026-08-29 | Removed all "primary income" concepts; every income source is treated equally | User explicitly rejected any income hierarchy |
-| 2026-08-30 | Removed the one-pay-cycle cap on needsReview's lookback entirely | User's real-world need: any unresolved bill should be reachable, no matter how far back, since the lookback-window approach was actually broken for its own purpose anyway |
-| 2026-08-30 | Deferred 3 real, clearly-scoped feature requests to next session rather than build them the same night as 4 bug fixes | Avoid rabbit-holing at the end of a long session; end on a clean, tested, deployed state |
+| 2026-08-29 | Removed all "primary income" concepts | User explicitly rejected any income hierarchy |
+| 2026-08-30 | Removed the one-pay-cycle cap on needsReview's lookback entirely | User's real-world need: any unresolved bill should be reachable, no matter how far back |
+| 2026-08-30 | Redesigned the bill-actions menu mid-build: separate one-tap "Confirm Paid" from a distinct "Update Amount" sub-screen | The original single "Mark Paid" sub-screen was one extra tap for the common case where the amount matches budget |
+| 2026-08-30 | Quick Spend always marks itself paid immediately; recurring is an explicit opt-in checkbox that creates a real ongoing Bill | Matches the actual mental model — logging something that already happened, with recurrence as a deliberate separate choice |
+| 2026-08-30 | Patched the timezone mismatch at the specific spots it broke tonight, deferred the full app-wide fix | A comprehensive timezone rewrite is real, careful work that shouldn't be rushed at the end of an already-long session |
 
 ---
 
@@ -319,65 +301,52 @@ bills.**
 
 *(Full history through 2026-07-22 preserved in prior version of this document.)*
 
-- **2026-08-23 through 2026-08-28**: Built occurrence-based paid tracking, recurring split
-  generation, `fundingModel`, the first "needs review" feature, full bill editing.
+- **2026-08-23 through 2026-08-29**: Built occurrence-based paid tracking, recurring split
+  generation, `fundingModel`, the first "needs review" feature, full bill/income editing, the
+  full multi-income-source refactor, bonus-paycheck badges.
 
-- **2026-08-29**: Built the full multi-income-source refactor, bonus-paycheck badges,
-  full income-source editing.
-
-- **2026-08-30**: First real day of daily use. Fixed two deployment bugs (Prisma client
-  generation on Vercel; `node_modules` in CLI deploys) and four related app-logic bugs, all
-  stemming from forward-only date logic used where current-cycle semantics were needed —
-  `planBillSplit()`, `ensureRecurringSplits()`'s fallback, `findUnresolvedOccurrences()`
-  (which also had its one-cycle cap removed entirely per explicit user request), and
-  split-bill `isOverdue` detection. Confirmed all four via real production data before fixing.
-  Discovered a new anomaly in the bill-repair path (toggle splittable off/on shows wrong
-  month) — deliberately parked rather than chased. Clearly scoped three new real feature
-  requests from actual usage ("paid a different amount," "quick spend," an all-paid
-  quick-glance indicator) with real design decisions already made, explicitly deferred to
-  next session. **Left open:** the July/August anomaly, and all three deferred features.
+- **2026-08-30**: The app's first real day of daily use. Fixed 2 deployment bugs and 4
+  related app-logic bugs (all "forward-only date logic" root cause). Discovered and partially
+  patched a real timezone mismatch between local dev and production. Built "paid a different
+  amount" (with a mid-session UX redesign of the bill-actions menu) and "Quick Spend" (which
+  required fixing a long-dormant `isRecurring` bug as a prerequisite). Deliberately parked a
+  new July/August anomaly from the split-repair path. **Left open:** that anomaly, the
+  app-wide timezone fix, split-leg amount overrides, and the Pay Periods mobile redesign.
 
 ---
 
 ## 10. Next Step (pick up here next session)
 
-1. **Investigate the July/August anomaly** from the splittable-toggle repair path — is it a
-   regression from tonight's fixes, or a separate pre-existing bug? Get real data before
-   guessing.
-2. **Build "paid a different amount"** for non-split bills: combined edit/delete/mark-paid
-   button with a small menu, `POST /api/bills/[id]/pay` accepting an optional `amount`
-   override, and the red/green strikethrough display treatment. Split-leg support as a fast
-   follow-up once this is confirmed working.
-3. **Build "quick spend / misc" one-time expense entry**, including the "make this a real
-   recurring bill" auto-create path.
-4. **Build the "all bills paid" quick-glance indicator** on the hero card, once paid-status
-   data is fully trustworthy again.
-5. Lower priority: verify the "Remaining" card color-grading code (drafted, not yet confirmed
-   applied), the Upcoming Pay Periods mobile redesign, multi-income-schedule edge cases,
-   `noUnusedLocals`/`noUnusedParameters`, consolidating duplicate date-equality logic.
+1. **Investigate the July/August anomaly** from the splittable-toggle repair path.
+2. **Decide on the app-wide timezone-independence fix** — a real, careful pass making date
+   construction consistent regardless of server timezone, rather than the targeted patches
+   applied tonight.
+3. **Extend "paid a different amount" to split-bill legs.**
+4. **Build the "all bills paid" quick-glance indicator**, now more trustworthy.
+5. **Tackle the Upcoming Pay Periods mobile redesign.**
+6. Lower priority: consolidate duplicate date-equality logic, add a note field to Quick
+   Spend, security hardening, a real Dialog component.
 
 **Standing lessons/habits to keep in mind going forward:**
 - With `--src-dir`, `proxy.ts` goes in `src/`, not `apps/web/` root.
 - Always run `npx prisma generate` after schema changes AND fully restart the dev server.
 - **Run a full `npm run build` locally before every commit/merge to `main`.**
-- The generated Prisma client isn't committed to git — `postinstall: prisma generate` handles
-  this automatically now; watch for accidental duplicate `"scripts"` JSON keys when editing
-  `package.json`.
-- `vercel --prod` via CLI needs an explicit `.vercelignore` — don't assume `.gitignore` alone
-  is respected.
-- Next.js 16 App Router dynamic route handlers need `request: NextRequest` — the exact type —
-  as the literal first parameter, even if unused.
+- The generated Prisma client isn't committed to git — watch for duplicate JSON keys when
+  editing `package.json`.
+- `vercel --prod` via CLI needs an explicit `.vercelignore`.
+- Next.js 16 dynamic route handlers need `request: NextRequest` (exact type) as the literal
+  first parameter, even if unused.
 - **"Forward-only date logic used where current-cycle logic was needed" is this project's
   single most recurring bug class** — `getCurrentOccurrence()` is almost always the right
-  tool when the real question is "what does this cycle currently owe," never
-  `projectBillDueDates()` or `nextOccurrenceOnOrAfter()`.
+  tool.
+- **Local dev and production can disagree on what timezone "midnight" is** — compare
+  calendar-day components (UTC-normalized) rather than exact timestamp ranges for date
+  equality, until the deeper app-wide fix lands.
 - When two real-world behaviors are legitimate but mutually exclusive, add an explicit stored
-  user choice — don't try to infer or guess.
-- A silently-swallowed typo (or duplicate key) produces no error anywhere, just a
-  wrong-but-plausible fallback.
-- Scope reconciliation-style or structural-change features precisely before building.
+  user choice.
+- A silently-swallowed typo or duplicate key produces no error, just a wrong-but-plausible
+  fallback.
 - Giving users a way to correct their own data (an edit modal) can resolve what looks like a
   code bug but is actually just bad input.
-- **Know when to stop.** Fixing 4 real, interconnected bugs in one session and stopping there
-  — rather than also starting 3 new features the same night — is a good outcome, not an
-  incomplete one.
+- Know when to stop chasing a fresh anomaly at the end of a long session — log it precisely
+  and move on.
