@@ -78,6 +78,7 @@ model Payment {
   id              String        @id @default(cuid())
   billId          String
   amount          Decimal
+  paidAmount      Decimal?
   paidDate        DateTime?
   status          PaymentStatus @default(SCHEDULED)
   isSplitPayment  Boolean       @default(false)

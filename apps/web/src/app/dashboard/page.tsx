@@ -4,6 +4,7 @@ import { DayOfMonthPicker } from "@/components/day-of-month-picker";
 import { EditBillModal } from "@/components/edit-bill-modal";
 import { EditIncomeModal } from "@/components/edit-income-modal";
 import { PayBillMenu } from "@/components/pay-bill-menu";
+import { SplitLegPayModal } from "@/components/split-leg-pay-modal";
 import { SplitSquareHorizontal, AlertTriangle, HelpCircle, Menu, Info, LogOut, MoreVertical } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -29,7 +30,6 @@ import {
   Zap,
   Wifi,
   Car,
-  //ShoppingCart,
   HeartPulse,
   Tag,
   Droplet,
@@ -53,6 +53,7 @@ type IncomeSource = {
 type SplitPaymentLeg = {
   id: string;
   amount: string;
+  paidAmount: string | null;
   paidDate: string;
   status: string;
   isSplitPayment: boolean;
@@ -93,6 +94,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [editingIncomeId, setEditingIncomeId] = useState<string | null>(null);
   const [editingBillId, setEditingBillId] = useState<string | null>(null);
+  const [payingLegId, setPayingLegId] = useState<string | null>(null);
   const [menuBillId, setMenuBillId] = useState<string | null>(null);
   const [expandedPeriod, setExpandedPeriod] = useState<number | null>(null);
   const [reviewingBillId, setReviewingBillId] = useState<string | null>(null);
@@ -279,6 +281,16 @@ export default function DashboardPage() {
     loadData();
   }
 
+  async function handleMarkSplitLegPaidAmount(paymentId: string, amount: number) {
+    await fetch(`/api/payments/${paymentId}/pay`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount }),
+    });
+    setPayingLegId(null);
+    loadData();
+  }
+
   async function handleSplitBill(billId: string) {
     await fetch(`/api/bills/${billId}/split`, { method: "POST" });
     loadData();
@@ -296,14 +308,10 @@ export default function DashboardPage() {
   const editingBill = bills.find((b) => b.id === editingBillId) ?? null;
   const editingIncome = income.find((i) => i.id === editingIncomeId) ?? null;
   const menuBill = bills.find((b) => b.id === menuBillId) ?? null;
+  const payingLeg =
+    bills.flatMap((b) => b.payments).find((p) => p.id === payingLegId) ?? null;
   const billsNeedingAttention = bills.filter((b) => b.isOverdue).length;
 
-  // Recurring bills occur once every calendar month by definition, so every
-  // recurring bill counts toward "this month's total" regardless of exactly
-  // when its due date falls. One-time Quick Spend entries (isRecurring:
-  // false) are deliberately excluded here — they're a single historical
-  // event already reflected in "Actual so far" spending, not an ongoing
-  // monthly obligation.
   const totalBillsThisMonth = bills
     .filter((b) => b.isRecurring)
     .reduce((sum, b) => sum + Number(b.amount), 0);
@@ -347,13 +355,6 @@ export default function DashboardPage() {
     ? currentPeriod.income - currentPeriod.totalBillAmount
     : totalIncome - totalBills;
 
-  // "Due before next payday" combines two different things that both
-  // represent money still owed before the next check: bills still assigned
-  // to the current period (forward-looking, not yet overdue) AND bills
-  // that have already fallen out of every period entirely because their
-  // occurrence is genuinely overdue (needsReview) — without this, a truly
-  // past-due bill would show as "$0 due" simply because periods only ever
-  // contain upcoming, not-yet-elapsed occurrences.
   const dueBeforeNextPaydayCount = (currentPeriod?.bills.length ?? 0) + needsReview.length;
   const dueBeforeNextPaydayAmount =
     (currentPeriod?.totalBillAmount ?? 0) + needsReview.reduce((sum, n) => sum + n.amount, 0);
@@ -368,10 +369,6 @@ export default function DashboardPage() {
   const actualSpentSoFar = currentPeriod
     ? bills.reduce((sum, b) => {
         if (b.hasActiveSplit) {
-          // Each split leg carries its own real paid status and date
-          // independently — no need to determine which "cycle" the whole
-          // group belongs to, just sum whichever individual legs are
-          // genuinely paid and fall within the current period.
           const paidLegsInPeriod = b.payments.filter(
             (p) =>
               p.isSplitPayment &&
@@ -380,14 +377,11 @@ export default function DashboardPage() {
               new Date(p.paidDate) >= new Date(currentPeriod.start) &&
               new Date(p.paidDate) < new Date(currentPeriod.end)
           );
-          return sum + paidLegsInPeriod.reduce((s, p) => s + Number(p.amount), 0);
+          return sum + paidLegsInPeriod.reduce((s, p) => s + Number(p.paidAmount ?? p.amount), 0);
         }
 
         if (!b.paidThisMonth) return sum;
 
-        // Only count this payment if it genuinely falls within the CURRENT
-        // pay period's own date range — "paid this calendar month" and
-        // "belongs to this specific pay period" are different things.
         const paidRow = b.payments.find((p) => p.status === "PAID" && !p.isSplitPayment);
         if (!paidRow || !paidRow.paidDate) return sum;
         const paidDate = new Date(paidRow.paidDate);
@@ -893,6 +887,11 @@ export default function DashboardPage() {
                     <div className="ml-6 mt-1.5 space-y-1">
                       {splitLegs.map((leg) => {
                         const legPaid = leg.status === "PAID";
+                        const legPaidDifferent =
+                          legPaid &&
+                          leg.paidAmount != null &&
+                          Number(leg.paidAmount) !== Number(leg.amount);
+
                         return (
                           <div key={leg.id} className="flex items-center justify-between gap-2 text-xs">
                             <div className="flex items-center gap-2">
@@ -908,7 +907,33 @@ export default function DashboardPage() {
                                   new Date(leg.paidDate).toLocaleDateString(undefined, { timeZone: "UTC" })}
                               </span>
                             </div>
-                            <span className="font-medium">${Number(leg.amount).toFixed(2)}</span>
+                            <div className="flex items-center gap-2">
+                              {legPaidDifferent ? (
+                                (() => {
+                                  const paidMore = Number(leg.paidAmount) > Number(leg.amount);
+                                  const colorClass = paidMore ? "text-red-500" : "text-green-600";
+                                  return (
+                                    <span className="flex flex-col items-end">
+                                      <span className={`line-through ${colorClass}`}>
+                                        ${Number(leg.amount).toFixed(2)}
+                                      </span>
+                                      <span className={`font-medium ${colorClass}`}>
+                                        ${Number(leg.paidAmount).toFixed(2)}
+                                      </span>
+                                    </span>
+                                  );
+                                })()
+                              ) : (
+                                <span className="font-medium">${Number(leg.amount).toFixed(2)}</span>
+                              )}
+                              <button
+                                onClick={() => setPayingLegId(leg.id)}
+                                className="text-muted-foreground/50 hover:text-primary transition-colors"
+                                aria-label="Edit paid amount"
+                              >
+                                <Pencil size={12} />
+                              </button>
+                            </div>
                           </div>
                         );
                       })}
@@ -1091,38 +1116,17 @@ export default function DashboardPage() {
           onDelete={() => handleDeleteBill(menuBill.id)}
         />
       )}
+
+      {payingLeg && (
+        <SplitLegPayModal
+          leg={payingLeg}
+          onClose={() => setPayingLegId(null)}
+          onConfirm={(paymentId, amount) => {
+            handleMarkSplitLegPaidAmount(paymentId, amount);
+          }}
+        />
+      )}
     </main>
-  );
-}
-
-function EditAmountForm({
-  initialValue,
-  onSave,
-  onCancel,
-}: {
-  initialValue: string;
-  onSave: (value: string) => void;
-  onCancel: () => void;
-}) {
-  const [value, setValue] = useState(initialValue);
-
-  return (
-    <div className="flex items-center gap-1">
-      <Input
-        type="number"
-        step="0.01"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        className="h-7 w-24 text-sm"
-        autoFocus
-      />
-      <button onClick={() => onSave(value)} className="text-primary hover:opacity-80">
-        <Check size={16} />
-      </button>
-      <button onClick={onCancel} className="text-muted-foreground/50 hover:text-foreground">
-        <X size={16} />
-      </button>
-    </div>
   );
 }
 

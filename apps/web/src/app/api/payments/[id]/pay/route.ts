@@ -27,9 +27,22 @@ export async function POST(
     );
   }
 
+  // Optional actual-amount override — same pattern as the non-split bill
+  // pay route. Falls back to the leg's own planned amount if no override
+  // is sent, or if it's not a valid positive number.
+  let paidAmount: number = Number(payment.amount);
+  try {
+    const body = await request.json();
+    if (body && typeof body.amount === "number" && body.amount > 0) {
+      paidAmount = body.amount;
+    }
+  } catch {
+    // No body sent — quick-toggle paid at the planned amount.
+  }
+
   const updated = await prisma.payment.update({
     where: { id: paymentId },
-    data: { status: "PAID" },
+    data: { status: "PAID", paidAmount },
   });
 
   return NextResponse.json(updated, { status: 200 });
@@ -62,7 +75,7 @@ export async function DELETE(
 
   const updated = await prisma.payment.update({
     where: { id: paymentId },
-    data: { status: "SCHEDULED" },
+    data: { status: "SCHEDULED", paidAmount: null },
   });
 
   return NextResponse.json(updated, { status: 200 });
