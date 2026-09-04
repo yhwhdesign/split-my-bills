@@ -36,6 +36,30 @@ export async function GET() {
     const paidThisMonth = !!matchingPaid;
     const paidAmount = matchingPaid ? matchingPaid.amount : null;
 
+    // Was LAST month's occurrence ever actually paid? isOverdue only ever
+    // checks THIS month's occurrence, so a bill due late in the month
+    // (e.g. the 25th) can silently "age out" the moment the calendar
+    // rolls to a new month — its current occurrence isn't due yet, so
+    // isOverdue is false, but nothing ever confirmed last month's was
+    // handled. Split bills already have this protection via
+    // previousSplitGroupId; this gives non-split bills the same coverage.
+    const previousOccurrence = new Date(currentOccurrence);
+    previousOccurrence.setUTCMonth(previousOccurrence.getUTCMonth() - 1);
+    const previousMonthPaid = b.payments.some(
+      (p) =>
+        p.status === "PAID" &&
+        !p.isSplitPayment &&
+        p.paidDate &&
+        p.paidDate.getUTCFullYear() === previousOccurrence.getUTCFullYear() &&
+        p.paidDate.getUTCMonth() === previousOccurrence.getUTCMonth() &&
+        p.paidDate.getUTCDate() === previousOccurrence.getUTCDate()
+    );
+    const startOfCurrentMonth = new Date(
+      Date.UTC(currentOccurrence.getUTCFullYear(), currentOccurrence.getUTCMonth(), 1)
+    );
+    const previousMonthUnpaid =
+      !b.splittable && !previousMonthPaid && b.createdAt < startOfCurrentMonth;
+
     const splitPayments = b.payments.filter(
       (p) => p.isSplitPayment && p.status === "SCHEDULED"
     );
@@ -109,6 +133,7 @@ export async function GET() {
       hasLateSplit: splitPayments.some((p) => p.isLate),
       currentSplitGroupId,
       previousSplitGroupId,
+      previousMonthUnpaid,
     };
   });
 
