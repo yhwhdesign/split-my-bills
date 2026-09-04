@@ -320,3 +320,54 @@ bills.**
   data rather than defending the current explanation.
 - Large pastes/uploads often come through empty — use plain text (split if needed) or
   screenshots instead.
+
+---
+
+## Addendum — 2026-09-04, later in session (reconciliation flow completed and verified)
+
+**Finished wiring the month-review flow to the server-persisted field, and found/fixed two
+more real gaps in the process:**
+
+- **Gating bug**: the review modal was checking `userLastReviewedMonth !== currentMonth` to
+  decide whether to show — meaning once a month was marked reviewed (even from an earlier,
+  incomplete test pass), it stayed permanently suppressed for the rest of that month, even if
+  a *new* unresolved item appeared later. **Fixed**: the trigger no longer checks the month
+  flag at all — it simply shows whenever an unresolved list is non-empty
+  (`isOverdue || previousMonthUnpaid || previousSplitGroupId`), which is self-correcting since
+  a genuinely resolved list is empty.
+
+- **A second real reconciliation gap, found via direct testing**: a non-split bill due late in
+  the month (e.g. the 25th) could have its *prior* month's occurrence silently "age out" the
+  moment the calendar rolled to a new month — `isOverdue` only ever checks the *current*
+  month's occurrence, so a bill not yet due this month reports `isOverdue: false` even if last
+  month's occurrence was never paid. **Fixed**: added `previousMonthUnpaid` to
+  `GET /api/bills` for non-split bills (split bills were already covered by
+  `previousSplitGroupId`), with a guard (`b.createdAt < startOfCurrentMonth`) so brand-new
+  bills are never false-flagged. The guard went through one real correction: an initial
+  stricter version (bill must exist *before its own due date*) incorrectly excluded a real
+  bill the user wanted flagged — it had been added a few days *after* its due date had
+  already passed, which is a completely normal real-world case, not one that should suppress
+  the check.
+
+- **`MonthlyReviewModal`'s `onClose` now takes a boolean** (`allResolved`) — only `true` if
+  every single card in that pass was answered "Paid." Any "Not yet," or closing early via the
+  X button, passes `false`, so the month is only marked reviewed once genuinely everything is
+  confirmed paid — not just "acknowledged."
+
+- **Added consistent visual indicators for all three unresolved states** — `isOverdue`,
+  `previousMonthUnpaid`, `previousSplitGroupId` — across three places that previously only
+  reacted to `isOverdue` alone: the bill row (red icon + bold red name), the hero card's
+  overdue count, and the "N bills past due" modal's list.
+
+- **Confirmed end-to-end with a real bill** (Central Ark Water, due the 25th, never paid in
+  August): correctly triggered `previousMonthUnpaid`, showed red/bold in the Bills list, was
+  correctly counted in the hero card, and correctly triggered the review modal — which
+  reappeared on refresh after answering "Not yet," confirming the persistence logic works as
+  intended.
+
+**Explicit TODO logged for a future session, not urgent:** the user wants to do a careful,
+unhurried review of the hero card's Total Bills and Remaining box logic/output — not because
+anything is known to be broken, but to verify the math is genuinely correct given how much has
+changed underneath these figures across several sessions, rather than assume it still is.
+
+**Last updated:** 2026-09-04 (end of session)
