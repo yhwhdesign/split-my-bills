@@ -42,6 +42,8 @@ export async function GET() {
     const hasActiveSplit = splitPayments.length > 0;
 
     let isOverdue: boolean;
+    let currentSplitGroupId: string | null = null;
+    let previousSplitGroupId: string | null = null;
 
     if (b.splittable) {
       // Split legs are always dated BEFORE the due date they fund (that's
@@ -58,19 +60,38 @@ export async function GET() {
         groups.set(p.splitGroupId, arr);
       }
 
+      // For each group, compute the occurrence it actually funds, and
+      // compare it against the CURRENT and PREVIOUS cycles. This is what
+      // lets the Bills list show only "this month's" split group by
+      // default, plus the immediately-prior one if it's still unresolved
+      // — instead of every group ever generated, all at once.
+      const previousOccurrence = new Date(currentOccurrence);
+      previousOccurrence.setUTCMonth(previousOccurrence.getUTCMonth() - 1);
+
       let currentCycleFunded = false;
-      for (const legs of groups.values()) {
+
+      for (const [groupId, legs] of groups.entries()) {
         const dated = legs.filter((l) => l.paidDate);
         if (dated.length === 0) continue;
         const maxLegDate = new Date(Math.max(...dated.map((l) => l.paidDate!.getTime())));
         const fundedDueDate = nextOccurrenceOnOrAfter(b.dueDate, maxLegDate);
-        const sameCycle =
-          fundedDueDate.getUTCFullYear() === currentOccurrence.getUTCFullYear() &&
-          fundedDueDate.getUTCMonth() === currentOccurrence.getUTCMonth() &&
-          fundedDueDate.getUTCDate() === currentOccurrence.getUTCDate();
-        if (sameCycle && legs.every((l) => l.status === "PAID")) {
-          currentCycleFunded = true;
-          break;
+
+        const isSameOccurrence = (a: Date, c: Date) =>
+          a.getUTCFullYear() === c.getUTCFullYear() &&
+          a.getUTCMonth() === c.getUTCMonth() &&
+          a.getUTCDate() === c.getUTCDate();
+
+        if (isSameOccurrence(fundedDueDate, currentOccurrence)) {
+          currentSplitGroupId = groupId;
+          if (legs.every((l) => l.status === "PAID")) {
+            currentCycleFunded = true;
+          }
+        } else if (isSameOccurrence(fundedDueDate, previousOccurrence)) {
+          // Only surface the previous cycle's group if it's NOT fully
+          // paid — a resolved past cycle doesn't need to keep showing.
+          if (!legs.every((l) => l.status === "PAID")) {
+            previousSplitGroupId = groupId;
+          }
         }
       }
 
@@ -86,6 +107,8 @@ export async function GET() {
       isOverdue,
       hasActiveSplit,
       hasLateSplit: splitPayments.some((p) => p.isLate),
+      currentSplitGroupId,
+      previousSplitGroupId,
     };
   });
 
