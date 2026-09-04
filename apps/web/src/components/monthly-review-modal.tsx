@@ -13,17 +13,23 @@ export function MonthlyReviewModal({
 }: {
   bills: ReviewBill[];
   onResolve: (billId: string, wasPaid: boolean) => void;
-  onClose: () => void;
+  onClose: (allResolved: boolean) => void;
 }) {
   const [index, setIndex] = useState(0);
+  const [allPaidSoFar, setAllPaidSoFar] = useState(true);
   const current = bills[index];
 
   function handleAnswer(wasPaid: boolean) {
     onResolve(current.id, wasPaid);
+    const stillAllPaid = allPaidSoFar && wasPaid;
+    setAllPaidSoFar(stillAllPaid);
     if (index + 1 < bills.length) {
       setIndex(index + 1);
     } else {
-      onClose();
+      // Only mark the month "reviewed" if EVERY bill was answered "Paid" —
+      // any "Not yet" means this should show again next time the app
+      // opens, not be silently considered done.
+      onClose(stillAllPaid);
     }
   }
 
@@ -36,7 +42,10 @@ export function MonthlyReviewModal({
           <span className="text-xs font-medium text-muted-foreground">
             New month check-in — {index + 1} of {bills.length}
           </span>
-          <button onClick={onClose} className="text-muted-foreground/60 hover:text-foreground">
+          <button
+            onClick={() => onClose(false)}
+            className="text-muted-foreground/60 hover:text-foreground"
+          >
             <X size={18} />
           </button>
         </div>

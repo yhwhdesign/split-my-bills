@@ -78,6 +78,7 @@ type Bill = {
   previousSplitGroupId: string | null;
   payments: SplitPaymentLeg[];
   isOverdue: boolean;
+  previousMonthUnpaid: boolean;
 };
 
 type NeedsReviewItem = {
@@ -106,6 +107,7 @@ export default function DashboardPage() {
   const [coachingLoading, setCoachingLoading] = useState(false);
   const [limitReached, setLimitReached] = useState(false);
   const [userName, setUserName] = useState<string | null>(null);
+  const [userLastReviewedMonth, setUserLastReviewedMonth] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [legendOpen, setLegendOpen] = useState(false);
   const [pastDueModalOpen, setPastDueModalOpen] = useState(false);
@@ -127,11 +129,10 @@ export default function DashboardPage() {
 
   useEffect(() => {
   if (loading) return;
-  const now = new Date();
-  const monthKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
-  const lastReviewed = localStorage.getItem("lastReviewedMonth");
-  const overdueBills = bills.filter((b) => b.isOverdue);
-  if (lastReviewed !== monthKey && overdueBills.length > 0) {
+  const overdueBills = bills.filter(
+    (b) => b.isOverdue || b.previousMonthUnpaid || !!b.previousSplitGroupId
+  );
+  if (overdueBills.length > 0) {
     setMonthlyReviewBills(
       overdueBills.map((b) => ({ id: b.id, name: b.name, amount: b.amount }))
     );
@@ -155,6 +156,7 @@ export default function DashboardPage() {
     setNeedsReview(periodsData.needsReview ?? []);
     const userData = await userRes.json();
     setUserName(userData.name ?? null);
+    setUserLastReviewedMonth(userData.lastReviewedMonth ?? null);
     setLoading(false);
   }
 
@@ -332,10 +334,17 @@ export default function DashboardPage() {
   }
 }
 
-function handleMonthlyReviewClose() {
-  const now = new Date();
-  const monthKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
-  localStorage.setItem("lastReviewedMonth", monthKey);
+async function handleMonthlyReviewClose(allResolved: boolean) {
+  if (allResolved) {
+    const now = new Date();
+    const monthKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+    await fetch("/api/user/me", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lastReviewedMonth: monthKey }),
+    });
+    setUserLastReviewedMonth(monthKey);
+  }
   setMonthlyReviewOpen(false);
 }
 
@@ -345,7 +354,9 @@ function handleMonthlyReviewClose() {
   const menuBill = bills.find((b) => b.id === menuBillId) ?? null;
   const payingLeg =
     bills.flatMap((b) => b.payments).find((p) => p.id === payingLegId) ?? null;
-  const billsNeedingAttention = bills.filter((b) => b.isOverdue).length;
+  const billsNeedingAttention = bills.filter(
+  (b) => b.isOverdue || b.previousMonthUnpaid || !!b.previousSplitGroupId
+).length;
 
   const totalBillsThisMonth = bills
     .filter((b) => b.isRecurring)
@@ -834,15 +845,17 @@ function handleMonthlyReviewClose() {
                       <div className="flex flex-col min-w-0">
                         <span
                           className={`font-medium flex items-center gap-1.5 ${
-                            b.paidThisMonth ? "text-muted-foreground line-through" : ""
-                          }`}
+  b.paidThisMonth ? "text-muted-foreground line-through" : ""
+} ${(b.isOverdue || b.previousMonthUnpaid || !!b.previousSplitGroupId) ? "text-red-600 font-bold" : ""}`}
                         >
                           {b.name}
                           {b.hasActiveSplit && (
                             <SplitSquareHorizontal size={13} className="text-primary" />
                           )}
                           {b.hasLateSplit && <AlertTriangle size={13} className="text-yellow-600" />}
-                          {b.isOverdue && <AlertTriangle size={13} className="text-red-500" />}
+                          {(b.isOverdue || b.previousMonthUnpaid || !!b.previousSplitGroupId) && (
+  <AlertTriangle size={13} className="text-red-500" />
+)}
                           {needsBillReview && (
                             <button
                               onClick={() =>
@@ -1099,8 +1112,8 @@ function handleMonthlyReviewClose() {
             </div>
             <div className="space-y-2">
               {bills
-                .filter((b) => b.isOverdue)
-                .map((b) => (
+  .filter((b) => b.isOverdue || b.previousMonthUnpaid || !!b.previousSplitGroupId)
+  .map((b) => (
                   <div
                     key={b.id}
                     className="flex items-center justify-between text-sm border-b pb-2"
