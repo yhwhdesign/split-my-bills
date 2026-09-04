@@ -41,6 +41,7 @@ import {
 import { Logo } from "@/components/logo";
 import { InstallPrompt } from "@/components/install-prompt";
 import { suggestCategory } from "@/lib/categorize-bill";
+import { MonthlyReviewModal } from "@/components/monthly-review-modal";
 
 type IncomeSource = {
   id: string;
@@ -57,6 +58,7 @@ type SplitPaymentLeg = {
   paidDate: string;
   status: string;
   isSplitPayment: boolean;
+  splitGroupId: string | null;
 };
 
 type Bill = {
@@ -72,6 +74,8 @@ type Bill = {
   isRecurring: boolean;
   hasActiveSplit: boolean;
   hasLateSplit: boolean;
+  currentSplitGroupId: string | null;
+  previousSplitGroupId: string | null;
   payments: SplitPaymentLeg[];
   isOverdue: boolean;
 };
@@ -106,6 +110,10 @@ export default function DashboardPage() {
   const [legendOpen, setLegendOpen] = useState(false);
   const [pastDueModalOpen, setPastDueModalOpen] = useState(false);
   const [dueModalOpen, setDueModalOpen] = useState(false);
+  const [monthlyReviewOpen, setMonthlyReviewOpen] = useState(false);
+  const [monthlyReviewBills, setMonthlyReviewBills] = useState<
+    { id: string; name: string; amount: string }[]
+  >([]);
 
   useEffect(() => {
     loadData();
@@ -116,6 +124,20 @@ export default function DashboardPage() {
       loadCoaching();
     }
   }, [loading]);
+
+  useEffect(() => {
+  if (loading) return;
+  const now = new Date();
+  const monthKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+  const lastReviewed = localStorage.getItem("lastReviewedMonth");
+  const overdueBills = bills.filter((b) => b.isOverdue);
+  if (lastReviewed !== monthKey && overdueBills.length > 0) {
+    setMonthlyReviewBills(
+      overdueBills.map((b) => ({ id: b.id, name: b.name, amount: b.amount }))
+    );
+    setMonthlyReviewOpen(true);
+  }
+}, [loading, bills]);
 
   async function loadData() {
     const [incomeRes, billsRes, periodsRes, userRes] = await Promise.all([
@@ -303,6 +325,19 @@ export default function DashboardPage() {
     }
     setReviewingBillId(null);
   }
+
+  function handleMonthlyReviewResolve(billId: string, wasPaid: boolean) {
+  if (wasPaid) {
+    handleTogglePaid(billId, false);
+  }
+}
+
+function handleMonthlyReviewClose() {
+  const now = new Date();
+  const monthKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+  localStorage.setItem("lastReviewedMonth", monthKey);
+  setMonthlyReviewOpen(false);
+}
 
   const needsReviewBillIds = new Set(needsReview.map((n) => n.billId));
   const editingBill = bills.find((b) => b.id === editingBillId) ?? null;
@@ -774,7 +809,10 @@ export default function DashboardPage() {
             </form>
 
             {bills.map((b) => {
-              const splitLegs = b.payments.filter((p) => p.isSplitPayment);
+              const relevantGroupIds = [b.currentSplitGroupId, b.previousSplitGroupId].filter(Boolean);
+              const splitLegs = b.payments.filter(
+                (p) => p.isSplitPayment && relevantGroupIds.includes(p.splitGroupId)
+              );
               const needsBillReview = needsReviewBillIds.has(b.id);
               const reviewItem = needsReview.find((n) => n.billId === b.id);
 
@@ -1126,6 +1164,15 @@ export default function DashboardPage() {
           }}
         />
       )}
+
+      {monthlyReviewOpen && (
+  <MonthlyReviewModal
+    bills={monthlyReviewBills}
+    onResolve={handleMonthlyReviewResolve}
+    onClose={handleMonthlyReviewClose}
+  />
+)}
+
     </main>
   );
 }

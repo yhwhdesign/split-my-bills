@@ -98,7 +98,7 @@ export async function ensureRecurringSplits(
   }
 
   const windowEnd = new Date();
-  windowEnd.setDate(windowEnd.getDate() + windowDays);
+  windowEnd.setUTCDate(windowEnd.getUTCDate() + windowDays);
 
   // If no split has ever existed for this bill, the FIRST one must target
   // the current cycle's occurrence — whether it's already past or still
@@ -108,12 +108,31 @@ export async function ensureRecurringSplits(
   const nextTarget = lastFundedDueDate
     ? new Date(lastFundedDueDate)
     : getCurrentOccurrence(bill.dueDate);
-  if (lastFundedDueDate) nextTarget.setMonth(nextTarget.getMonth() + 1);
+  if (lastFundedDueDate) nextTarget.setUTCMonth(nextTarget.getUTCMonth() + 1);
 
   const created: { splitGroupId: string }[] = [];
 
   while (nextTarget <= windowEnd) {
     const [firstDate, secondDate] = pickSplitDates(nextTarget, incomeSources);
+
+    // Guard against a concurrent request having already created this exact
+    // cycle's split — the dashboard fires GET /api/bills and
+    // GET /api/split-suggestions at the same time, and two overlapping
+    // calls to this function can each independently see "nothing exists
+    // yet" and each create a full duplicate set. Checking for an existing
+    // leg at this exact target date closes that window in practice.
+    const alreadyExists = await prisma.payment.findFirst({
+      where: {
+        billId: bill.id,
+        isSplitPayment: true,
+        paidDate: firstDate,
+      },
+    });
+    if (alreadyExists) {
+      nextTarget.setUTCMonth(nextTarget.getUTCMonth() + 1);
+      continue;
+    }
+
     const splitGroupId = crypto.randomUUID();
     const half = bill.amount / 2;
 
@@ -143,7 +162,7 @@ export async function ensureRecurringSplits(
     ]);
 
     created.push({ splitGroupId });
-    nextTarget.setMonth(nextTarget.getMonth() + 1);
+    nextTarget.setUTCMonth(nextTarget.getUTCMonth() + 1);
   }
 
   return created;
@@ -164,12 +183,43 @@ export async function regenerateSplitsIfNeeded(
     },
   });
 
-  if (isSplittable) {
-    try {
-      await createBillSplit(billId, userId);
-    } catch (err) {
-      // Same tolerant handling as bill creation — e.g. no income source yet.
-      console.error("regenerateSplitsIfNeeded: split creation failed:", err);
-    }
+  if (!isSplittable) return;
+
+  const bill = await prisma.bill.findUnique({ where: { id: billId } });
+  if (!bill || bill.userId !== userId) return;
+
+  const incomeSources = await prisma.incomeSource.findMany({ where: { userId } });
+  if (incomeSources.length === 0) {
+    console.error("regenerateSplitsIfNeeded: no income source found for user", userId);
+    return;
+  }
+
+  const incomeInputs: IncomeSourceInput[] = incomeSources.map((i) => ({
+    amount: Number(i.amount),
+    paySchedule: i.frequency as PaySchedule,
+    anchorDate: i.nextPayDate,
+  }));
+
+  // IMPORTANT: this calls ensureRecurringSplits(), NOT createBillSplit().
+  // createBillSplit() always blindly targets "today's calendar month" with
+  // zero awareness of what's already been funded — fine for a genuinely
+  // brand-new bill, but WRONG for a repair on a bill that already has real
+  // paid history beyond the current month (which is normal for any split
+  // bill, by design — they're always funded two paydays ahead). Calling
+  // ensureRecurringSplits() here means the repair path correctly looks at
+  // whatever PAID history survived the deletion above and advances PAST
+  // it, exactly like the automatic recurring-split logic already does
+  // correctly every day — instead of duplicating an already-funded cycle.
+  try {
+    await ensureRecurringSplits(
+      {
+        id: bill.id,
+        dueDate: bill.dueDate,
+        amount: Number(bill.amount),
+      },
+      incomeInputs
+    );
+  } catch (err) {
+    console.error("regenerateSplitsIfNeeded: split generation failed:", err);
   }
 }

@@ -38,6 +38,7 @@ model User {
   incomeSources IncomeSource[]
   bills         Bill[]
   suggestions   SplitSuggestion[]
+  lastReviewedMonth String?
 }
 
 model IncomeSource {
@@ -89,6 +90,7 @@ model Payment {
 
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
+  @@unique([billId, paidDate, isSplitPayment])
 }
 
 model SplitSuggestion {
