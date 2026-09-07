@@ -477,3 +477,54 @@ requirements that hasn't been accounted for yet, rather than assuming they simpl
 understood. This session's multi-hour loop was caused by exactly that mistake.
 
 **Last updated:** 2026-09-07
+
+---
+
+## Addendum — 2026-09-07, later same session (mobile carousel fix confirmed)
+
+Verified and fixed the Upcoming Pay Periods carousel's mobile responsiveness — cards were
+rendering too wide on a real phone. Root cause: the `-mx-1 px-1` "edge-to-edge bleed" trick
+was fighting the card's own built-in padding, and `w-full` alone wasn't reliably forcing
+exact 100% width inside the flex row. Fixed by dropping the bleed trick and forcing each
+card's sizing explicitly (`flex: 0 0 100%` alongside `basis-full`), so it can never grow
+wider than the container regardless of content. **Confirmed working on an actual phone.**
+
+This closes out both items opened earlier today: the real `NEXT_CHECK` split-funding bug
+(previous addendum) and the mobile carousel redesign — the two verification items queued up
+right after that fix.
+
+**Remaining active backlog, in order:**
+1. **Cross-bill payday coordination** — a real paycheck should never silently go unused
+   across bills; a 3rd/5th "extra" paycheck should stay a flagged rarity (matches the
+   existing 3PD/5PD badge concept), not disappear into regular per-bill funding math.
+   Detection already works correctly across all 4 pay frequencies (confirmed earlier this
+   week) — what's still missing is coordinating bill-funding decisions so real extra income
+   doesn't get silently absorbed.
+2. **Future "savings" feature** — deliberately deferred, tied to an eventual bank-statement
+   upload capability (not started, no dependencies built yet).
+
+**Last updated:** 2026-09-07 (session close)
+
+---
+
+## Addendum — 2026-09-07, new backlog item logged
+
+**New design concern, not yet scoped or started**: on a real iPhone 15 Pro Max, the app
+currently reads as a "minimized desktop" layout rather than feeling like a native mobile app.
+This is distinct from individual responsiveness bugs (like the carousel sizing issue fixed
+earlier today) — it's a broader visual/UX gap in how the whole app presents itself on mobile.
+Added to the active backlog for a future dedicated pass.
+
+**Updated active backlog, in order:**
+1. **Cross-bill payday coordination** — a real paycheck should never silently go unused
+   across bills; detection of "extra" paychecks already works correctly across all 4 pay
+   frequencies — what's missing is coordinating bill-funding decisions so real extra income
+   doesn't get silently absorbed.
+2. **Mobile-native visual redesign** — move the overall app feel from "shrunk desktop" to
+   genuinely native-feeling mobile, beyond individual component fixes.
+3. **Hero card math review** — not urgent, no known bug, just wants a careful verification
+   pass given how much has changed underneath these figures.
+4. **Future "savings" feature** — deferred, tied to an eventual bank-statement upload
+   capability.
+
+**Last updated:** 2026-09-07
