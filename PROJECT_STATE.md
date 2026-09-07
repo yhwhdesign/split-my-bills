@@ -371,3 +371,54 @@ anything is known to be broken, but to verify the math is genuinely correct give
 changed underneath these figures across several sessions, rather than assume it still is.
 
 **Last updated:** 2026-09-04 (end of session)
+
+---
+
+## Addendum — 2026-09-06 (the "file never saved" saga, and the real fix that resulted)
+
+**A single fix took an extremely long time to verify — not because the fix was wrong, but
+because the edited file was never actually saved to disk.** Every diagnostic tried along the
+way was legitimate and correctly executed: service worker unregistration, browser cache
+clearing, killing the Turborepo daemon, checking for duplicate running processes, a completely
+fresh `git clone` into a separate folder, and finally a raw `curl` request that bypassed the
+browser entirely. Every single one correctly reported "still broken," because the file
+genuinely didn't have the fix yet — no amount of environment-level debugging could have found
+that. **The one test that finally proved it: `grep -c "known-new-string" path/to/file.ts`, run
+directly in the terminal, completely bypassing the editor.**
+
+**New standing rule, added to the top of the lessons list**: whenever a fix "looks right" in
+every paste and passes a clean build, but still doesn't take effect anywhere, the FIRST
+diagnostic step — before touching servers, caches, browsers, or processes — should be a raw
+`grep`/`cat` of the file straight from disk. This should be step one, not the last resort
+after hours of everything else.
+
+**A second, smaller lesson from the same night**: `git status` revealed an unrelated file
+(`apps/web/src/app/api/bills/[id]/route.ts`) had been accidentally overwritten with the wrong
+route's content at some point — caught only because `git status`'s full file list was read
+carefully before committing, rather than running `git add .` blindly. Fixed with
+`git checkout -- <file>` to restore it from the last good commit. Reinforced habit: always
+review the complete `git status` file list before committing after a long multi-file session,
+and use `grep -c` on each changed file as a final sanity check when trust has been shaken.
+
+**The actual fix, once verified**: `POST /api/bills/[id]/pay` now accepts an optional
+`occurrenceDate` in its request body — if provided, it marks THAT specific date's occurrence
+paid instead of always defaulting to today's current cycle. This was the missing piece that
+let the monthly review flow actually resolve a missed prior-month bill, instead of endlessly
+re-flagging it (since marking "today's" occurrence paid did nothing to satisfy a check for a
+different, earlier date). `GET /api/bills` also now exposes the exact `previousOccurrenceDate`
+and `currentOccurrenceDate` for each bill, so the frontend knows precisely which date to
+target. **Confirmed working end-to-end**: Central Ark Water's missed August occurrence was
+correctly marked paid via the review modal, and did not reappear on refresh. Committed and
+pushed to both `dev` and `main` for the first time all week (prior sessions' work had
+accumulated locally without being pushed).
+
+**Last updated:** 2026-09-06
+
+---
+
+## Addendum — 2026-09-07, next session begins
+
+Picking up fresh (new day, explicit ask to move a bit faster while still learning
+thoroughly). Next up, per the standing backlog: a careful, unhurried review of the hero
+card's Total Bills and Remaining box logic/output — not a known bug, just verifying
+correctness given how much has changed underneath these figures across sessions.
