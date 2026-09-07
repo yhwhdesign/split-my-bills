@@ -4,6 +4,7 @@ import { EditBillModal } from "@/components/edit-bill-modal";
 import { EditIncomeModal } from "@/components/edit-income-modal";
 import { PayBillMenu } from "@/components/pay-bill-menu";
 import { SplitLegPayModal } from "@/components/split-leg-pay-modal";
+import { BottomNav, type TabKey } from "@/components/bottom-nav";
 import { SplitSquareHorizontal, AlertTriangle, HelpCircle, Menu, Info, LogOut, MoreVertical } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -86,6 +87,7 @@ type NeedsReviewItem = {
 };
 export default function DashboardPage() {
   const router = useRouter();
+  const [activeTab, setActiveTab] = useState<TabKey>("home");
   const [income, setIncome] = useState<IncomeSource[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
   const [periods, setPeriods] = useState<any[]>([]);
@@ -126,7 +128,6 @@ export default function DashboardPage() {
   if (loading) return;
   const now = new Date();
   const monthKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
-  // Only ever ask once per real calendar month — not on every reload.
   if (userLastReviewedMonth === monthKey) return;
   const overdueBills = bills.filter(
     (b) => b.isOverdue || b.previousMonthUnpaid || !!b.previousSplitGroupId
@@ -433,7 +434,7 @@ export default function DashboardPage() {
   );
 }
   return (
-    <main className="mx-auto max-w-4xl p-4 sm:p-8 space-y-6 sm:space-y-8">
+    <main className="mx-auto max-w-4xl p-4 sm:p-8 space-y-6 sm:space-y-8 pb-24">
       <div className="flex items-center justify-between border-b pb-4">
         <div>
           <Logo />
@@ -472,6 +473,7 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
       {legendOpen && (
         <Card className="shadow-sm border-border/50 py-6">
           <CardHeader>
@@ -504,25 +506,181 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       )}
+
       <InstallPrompt />
-      <div className="rounded-2xl bg-zinc-900 p-6 sm:p-8 shadow-lg">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-4">
-          <div>
-            <p className="text-xs uppercase tracking-wide text-zinc-400">
-  Projected Income (thru {endOfYearUTC.toLocaleDateString(undefined, { timeZone: "UTC" })})
-</p>
-            <p className="text-3xl font-bold text-white mt-1">${projectedIncomeToYearEnd.toFixed(2)}</p>
-            <p className="text-xs text-zinc-500 mt-2">
-              Current paycheck: <span className="text-zinc-300">${(currentPeriod?.income ?? 0).toFixed(2)}</span>
-            </p>
+
+      {activeTab === "home" && (
+        <>
+          <div className="rounded-2xl bg-zinc-900 p-6 sm:p-8 shadow-lg">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-zinc-400">
+                  Projected Income (thru {endOfYearUTC.toLocaleDateString(undefined, { timeZone: "UTC" })})
+                </p>
+                <p className="text-3xl font-bold text-white mt-1">${projectedIncomeToYearEnd.toFixed(2)}</p>
+                <p className="text-xs text-zinc-500 mt-2">
+                  Current paycheck: <span className="text-zinc-300">${(currentPeriod?.income ?? 0).toFixed(2)}</span>
+                </p>
+              </div>
+              <div className="sm:border-l sm:border-zinc-700 sm:pl-4">
+                <p className="text-xs uppercase tracking-wide text-zinc-400">Total Bills This Month</p>
+                <p className="text-3xl font-bold text-white mt-1">${totalBillsThisMonth.toFixed(2)}</p>
+                {currentPeriod && (
+                  <button
+                    onClick={() => setDueModalOpen(true)}
+                    className="text-xs text-zinc-500 mt-2 underline decoration-dotted hover:text-zinc-300 text-left"
+                  >
+                    Due before next payday: <span className="text-zinc-300">{dueBeforeNextPaydayCount} bill{dueBeforeNextPaydayCount !== 1 ? "s" : ""}, ${dueBeforeNextPaydayAmount.toFixed(2)}</span>
+                  </button>
+                )}
+                <p className="text-xs mt-1">
+                  {billsNeedingAttention === 0 ? (
+                    <span className="text-primary">✓ All bills paid</span>
+                  ) : (
+                    <button
+                      onClick={() => setPastDueModalOpen(true)}
+                      className="text-red-400 underline decoration-dotted hover:text-red-300"
+                    >
+                      {billsNeedingAttention} bill{billsNeedingAttention !== 1 ? "s" : ""} past due
+                    </button>
+                  )}
+                </p>
+              </div>
+              <div className="sm:border-l sm:border-zinc-700 sm:pl-4">
+                <p className="text-xs uppercase tracking-wide text-zinc-400">
+                  Projected Remaining (thru {endOfYearUTC.toLocaleDateString(undefined, { timeZone: "UTC" })})
+                </p>
+                {(() => {
+                  const periodTotal = currentPeriod ? currentPeriod.income : totalIncome;
+                  const usedRatio = periodTotal > 0 ? (periodTotal - periodRemaining) / periodTotal : 0;
+                  const isNegative = projectedRemainingThruNextMonth < 0;
+                  const isTight = !isNegative && usedRatio > 0.8;
+                  const colorClass = isNegative
+                    ? "text-red-400"
+                    : isTight
+                    ? "text-yellow-400"
+                    : "text-primary";
+                  return (
+                    <>
+                      <p className={`text-3xl font-bold mt-1 flex items-center gap-2 ${colorClass}`}>
+                        ${projectedRemainingThruNextMonth.toFixed(2)}
+                        {(isNegative || isTight) && <AlertTriangle size={20} />}
+                      </p>
+                      {currentPeriod && (
+                        <p className="text-xs text-zinc-500 mt-2">
+                          This payday to next: <span className="text-zinc-300">${periodRemaining.toFixed(2)}</span>
+                        </p>
+                      )}
+                      {actualRemaining !== null && (
+                        <p className="text-xs text-zinc-500 mt-1">
+                          Actual so far: <span className="text-zinc-300">${actualRemaining.toFixed(2)}</span>
+                        </p>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+            {totalIncome > 0 && (
+              <div className="mt-6 pt-6 border-t border-zinc-700">
+                <div className="flex justify-between text-xs text-zinc-400 mb-2">
+                  <span>Bills committed</span>
+                  <span>{Math.min(100, Math.round((totalBills / totalIncome) * 100))}% of income</span>
+                </div>
+                <div className="h-2 w-full rounded-full bg-zinc-800 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      totalBills / totalIncome > 1
+                        ? "bg-red-400"
+                        : totalBills / totalIncome > 0.8
+                        ? "bg-yellow-400"
+                        : "bg-primary"
+                    }`}
+                    style={{ width: `${Math.min(100, (totalBills / totalIncome) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
-          <div className="sm:border-l sm:border-zinc-700 sm:pl-4">
+
+          <Card className="border-primary/30 bg-primary/5 shadow-sm py-6">
+            <CardHeader>
+              <CardTitle>Your AI Coach</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {coachingLoading ? (
+                <p className="text-muted-foreground text-sm">Thinking...</p>
+              ) : limitReached ? (
+                <p className="text-muted-foreground text-sm">
+                  AI suggestions have reached today&apos;s limit — your bills and split suggestions
+                  above are still fully accurate. Check back tomorrow for AI coaching.
+                </p>
+              ) : coaching ? (
+                <p className="text-sm whitespace-pre-wrap">{coaching}</p>
+              ) : (
+                <p className="text-muted-foreground text-sm">No suggestions available right now.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          {billFundingRecommendations.length > 0 && (
+            <Card className="border-yellow-500/30 bg-yellow-500/5 shadow-sm py-6">
+              <CardHeader>
+                <CardTitle>Use This Extra Paycheck</CardTitle>
+                <CardDescription>
+                  A bill needs this paycheck to avoid going significantly late
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {billFundingRecommendations.map((r: any, idx: number) => (
+                  <div key={idx} className="rounded-md border border-yellow-500/20 bg-background p-3 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">{r.billName}</span>
+                      <span className="text-xs font-semibold text-yellow-600">
+                        ${Number(r.billAmount).toFixed(2)}
+                      </span>
+                    </div>
+                    <p className="text-muted-foreground text-xs mt-1">{r.reasoning}</p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {opportunities.length > 0 && (
+            <Card className="border-primary/30 bg-primary/5 shadow-sm py-6">
+              <CardHeader>
+                <CardTitle>Extra Paycheck Opportunities</CardTitle>
+                <CardDescription>An extra paycheck this pay cycle — good chances to get ahead</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {opportunities.map((o, idx) => (
+                  <div key={idx} className="rounded-md border border-primary/20 bg-background p-3 text-sm">
+                    <div className="font-medium flex items-center gap-2">
+                      {new Date(o.payDate).toLocaleDateString(undefined, { timeZone: "UTC"})}
+                      {o.bonusPaycheckLabels?.map((label: string) => (
+                        <span key={label} className="rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-0.5 tracking-wide">
+                          {label}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+        </>
+      )}
+
+      {activeTab === "bills" && (
+        <>
+          <div className="rounded-2xl bg-zinc-900 p-5 shadow-lg">
             <p className="text-xs uppercase tracking-wide text-zinc-400">Total Bills This Month</p>
             <p className="text-3xl font-bold text-white mt-1">${totalBillsThisMonth.toFixed(2)}</p>
             {currentPeriod && (
               <button
                 onClick={() => setDueModalOpen(true)}
-                className="text-xs text-zinc-500 mt-2 underline decoration-dotted hover:text-zinc-300 text-left"
+                className="text-xs text-zinc-500 mt-2 underline decoration-dotted hover:text-zinc-300 text-left block"
               >
                 Due before next payday: <span className="text-zinc-300">{dueBeforeNextPaydayCount} bill{dueBeforeNextPaydayCount !== 1 ? "s" : ""}, ${dueBeforeNextPaydayAmount.toFixed(2)}</span>
               </button>
@@ -539,247 +697,293 @@ export default function DashboardPage() {
                 </button>
               )}
             </p>
+            {actualRemaining !== null && (
+              <p className="text-xs text-zinc-500 mt-2 pt-2 border-t border-zinc-700">
+                Actual remaining this payday: <span className="text-zinc-300">${actualRemaining.toFixed(2)}</span>
+              </p>
+            )}
           </div>
-          <div className="sm:border-l sm:border-zinc-700 sm:pl-4">
-            <p className="text-xs uppercase tracking-wide text-zinc-400">
-              Projected Remaining (thru {endOfYearUTC.toLocaleDateString(undefined, { timeZone: "UTC" })})
-            </p>
-            {(() => {
-              const periodTotal = currentPeriod ? currentPeriod.income : totalIncome;
-              const usedRatio = periodTotal > 0 ? (periodTotal - periodRemaining) / periodTotal : 0;
-              const isNegative = projectedRemainingThruNextMonth < 0;
-              const isTight = !isNegative && usedRatio > 0.8;
-              const colorClass = isNegative
-                ? "text-red-400"
-                : isTight
-                ? "text-yellow-400"
-                : "text-primary";
-              return (
-                <>
-                  <p className={`text-3xl font-bold mt-1 flex items-center gap-2 ${colorClass}`}>
-                    ${projectedRemainingThruNextMonth.toFixed(2)}
-                    {(isNegative || isTight) && <AlertTriangle size={20} />}
-                  </p>
-                  {currentPeriod && (
-                    <p className="text-xs text-zinc-500 mt-2">
-                      This payday to next: <span className="text-zinc-300">${periodRemaining.toFixed(2)}</span>
-                    </p>
-                  )}
-                  {actualRemaining !== null && (
-                    <p className="text-xs text-zinc-500 mt-1">
-                      Actual so far: <span className="text-zinc-300">${actualRemaining.toFixed(2)}</span>
-                    </p>
-                  )}
-                </>
-              );
-            })()}
-          </div>
-        </div>
-        {totalIncome > 0 && (
-          <div className="mt-6 pt-6 border-t border-zinc-700">
-            <div className="flex justify-between text-xs text-zinc-400 mb-2">
-              <span>Bills committed</span>
-              <span>{Math.min(100, Math.round((totalBills / totalIncome) * 100))}% of income</span>
-            </div>
-            <div className="h-2 w-full rounded-full bg-zinc-800 overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all ${
-                  totalBills / totalIncome > 1
-                    ? "bg-red-400"
-                    : totalBills / totalIncome > 0.8
-                    ? "bg-yellow-400"
-                    : "bg-primary"
-                }`}
-                style={{ width: `${Math.min(100, (totalBills / totalIncome) * 100)}%` }}
-              />
-            </div>
-          </div>
-        )}
-      </div>
-      <Card className="border-primary/30 bg-primary/5 shadow-sm py-6">
-        <CardHeader>
-          <CardTitle>Your AI Coach</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {coachingLoading ? (
-            <p className="text-muted-foreground text-sm">Thinking...</p>
-          ) : limitReached ? (
-            <p className="text-muted-foreground text-sm">
-              AI suggestions have reached today&apos;s limit — your bills and split suggestions
-              above are still fully accurate. Check back tomorrow for AI coaching.
-            </p>
-          ) : coaching ? (
-            <p className="text-sm whitespace-pre-wrap">{coaching}</p>
-          ) : (
-            <p className="text-muted-foreground text-sm">No suggestions available right now.</p>
-          )}
-        </CardContent>
-      </Card>
-      {periods.length > 0 && (
-  <Card className="shadow-sm border-border/50 py-6">
-    <CardHeader>
-      <CardTitle>Upcoming Pay Periods</CardTitle>
-      <CardDescription>Swipe to see each period — based on your pay schedule and bills</CardDescription>
-    </CardHeader>
-    <CardContent>
-      <div
-        className="flex overflow-x-auto snap-x snap-mandatory gap-3 pb-2"
-        style={{ scrollbarWidth: "none" }}
-        onScroll={(e) => {
-          const el = e.currentTarget;
-          const idx = Math.round(el.scrollLeft / el.clientWidth);
-          if (idx !== expandedPeriod && idx >= 0 && idx < periods.length) {
-            setPeriodCarouselIndex(idx);
-          }
-        }}
-      >
-        {periods.map((p, idx) => (
-          <div
-            key={idx}
-            className="snap-center shrink-0 basis-full"
-style={{ scrollSnapAlign: "center", flex: "0 0 100%" }}
-          >
-            <div
-              className={`rounded-md border text-sm h-full ${
-                p.isCashflowRisk ? "border-destructive/50 bg-destructive/5" : "border-border"
-              }`}
-            >
-              <button
-                onClick={() => setExpandedPeriod(expandedPeriod === idx ? null : idx)}
-                className="flex w-full items-center justify-between gap-2 p-3 text-left flex-wrap"
-              >
-                <div>
-                  <div className="font-medium">
-                    {new Date(p.payDate).toLocaleDateString(undefined, { timeZone: "UTC" })}
-                    {p.bonusPaycheckLabels?.map((label: string) => (
+
+          {suggestions.length > 0 && (
+            <Card className="border-primary/30 bg-primary/5 shadow-sm py-6">
+              <CardHeader>
+                <CardTitle>Split Suggestions</CardTitle>
+                <CardDescription>Ways to smooth out tight pay periods</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {suggestions.map((s, idx) => (
+                  <div key={idx} className="rounded-md border border-primary/20 bg-background p-3 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">{s.billName}</span>
                       <span
-                        key={label}
-                        className="ml-2 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-0.5 tracking-wide align-middle"
+                        className={`text-xs font-medium ${
+                          s.wouldResolve ? "text-primary" : "text-muted-foreground"
+                        }`}
                       >
-                        {label}
+                        {s.wouldResolve ? "Resolves shortfall" : "Partial help"}
                       </span>
-                    ))}
-                  </div>
-                  <div className="text-muted-foreground text-xs">
-                    {p.bills.length} bill{p.bills.length !== 1 ? "s" : ""} — $
-                    {p.totalBillAmount.toFixed(2)} due
-                  </div>
-                </div>
-                {p.isCashflowRisk ? (
-                  <span className="rounded-full bg-destructive/10 text-destructive text-xs font-semibold px-2.5 py-1">
-                    Short ${p.shortfall.toFixed(2)}
-                  </span>
-                ) : (
-                  <span className="rounded-full bg-primary/10 text-primary text-xs font-semibold px-2.5 py-1">
-                    On track
-                  </span>
-                )}
-              </button>
-              {expandedPeriod === idx && p.bills.length > 0 && (
-                <div className="border-t px-3 py-2 space-y-1 max-h-64 overflow-y-auto">
-                  {p.bills.map((item: any, i: number) => (
-                    <div key={i} className="flex justify-between text-xs text-muted-foreground">
-                      <span className="font-medium">{item.bill.name}</span>
-                      <span className="font-semibold">${item.bill.amount.toFixed(2)}</span>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="flex justify-center gap-1.5 mt-3">
-        {periods.map((_, idx) => (
-          <span
-            key={idx}
-            className={`h-1.5 w-1.5 rounded-full transition-colors ${
-              idx === periodCarouselIndex ? "bg-primary" : "bg-muted"
-            }`}
-          />
-        ))}
-      </div>
-    </CardContent>
-  </Card>
-)}
-      {suggestions.length > 0 && (
-        <Card className="border-primary/30 bg-primary/5 shadow-sm py-6">
-          <CardHeader>
-            <CardTitle>Split Suggestions</CardTitle>
-            <CardDescription>Ways to smooth out tight pay periods</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {suggestions.map((s, idx) => (
-              <div key={idx} className="rounded-md border border-primary/20 bg-background p-3 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium">{s.billName}</span>
-                  <span
-                    className={`text-xs font-medium ${
-                      s.wouldResolve ? "text-primary" : "text-muted-foreground"
-                    }`}
-                  >
-                    {s.wouldResolve ? "Resolves shortfall" : "Partial help"}
-                  </span>
-                </div>
-                <p className="text-muted-foreground text-xs mt-1">{s.reasoning}</p>
-                <Button
-                  size="sm"
-                  className="mt-2 font-semibold"
-                  onClick={() => handleSplitBill(s.billId)}
-                >
-                  Split this bill
+                    <p className="text-muted-foreground text-xs mt-1">{s.reasoning}</p>
+                    <Button
+                      size="sm"
+                      className="mt-2 font-semibold"
+                      onClick={() => handleSplitBill(s.billId)}
+                    >
+                      Split this bill
+                    </Button>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          <Card className="shadow-sm border-border/50 py-6">
+            <CardHeader>
+              <CardTitle>Bills</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <form onSubmit={handleQuickSpend} className="rounded-md border border-dashed p-3 space-y-2 bg-muted/30">
+                <p className="text-xs font-medium text-muted-foreground">Quick Spend — log something you already paid</p>
+                <Input name="name" placeholder="What was it?" required />
+                <Input name="amount" type="number" step="0.01" placeholder="Amount" required />
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <input type="checkbox" name="isRecurring" />
+                  This is recurring — add it to my regular budgeted bills
+                </label>
+                <Button type="submit" size="sm" variant="outline" className="w-full font-semibold">
+                  Log Expense
                 </Button>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
-      {billFundingRecommendations.length > 0 && (
-  <Card className="border-yellow-500/30 bg-yellow-500/5 shadow-sm py-6">
-    <CardHeader>
-      <CardTitle>Use This Extra Paycheck</CardTitle>
-      <CardDescription>
-        A bill needs this paycheck to avoid going significantly late
-      </CardDescription>
-    </CardHeader>
-    <CardContent className="space-y-3">
-      {billFundingRecommendations.map((r: any, idx: number) => (
-        <div key={idx} className="rounded-md border border-yellow-500/20 bg-background p-3 text-sm">
-          <div className="flex items-center justify-between">
-            <span className="font-medium">{r.billName}</span>
-            <span className="text-xs font-semibold text-yellow-600">
-              ${Number(r.billAmount).toFixed(2)}
-            </span>
-          </div>
-          <p className="text-muted-foreground text-xs mt-1">{r.reasoning}</p>
-        </div>
-      ))}
-    </CardContent>
-  </Card>
-)}
-      {opportunities.length > 0 && (
-        <Card className="border-primary/30 bg-primary/5 shadow-sm py-6">
-          <CardHeader>
-            <CardTitle>Extra Paycheck Opportunities</CardTitle>
-            <CardDescription>An extra paycheck this pay cycle — good chances to get ahead</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {opportunities.map((o, idx) => (
-              <div key={idx} className="rounded-md border border-primary/20 bg-background p-3 text-sm">
-                <div className="font-medium flex items-center gap-2">
-                  {new Date(o.payDate).toLocaleDateString(undefined, { timeZone: "UTC"})}
-                  {o.bonusPaycheckLabels?.map((label: string) => (
-                    <span key={label} className="rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-0.5 tracking-wide">
-                      {label}
-                    </span>
-                  ))}
+              </form>
+              {bills.map((b) => {
+                const relevantGroupIds = [b.currentSplitGroupId, b.previousSplitGroupId].filter(Boolean);
+                const splitLegs = b.payments.filter(
+                  (p) => p.isSplitPayment && relevantGroupIds.includes(p.splitGroupId)
+                );
+                const needsBillReview = needsReviewBillIds.has(b.id);
+                const reviewItem = needsReview.find((n) => n.billId === b.id);
+                return (
+                  <div key={b.id} className="border-b pb-3 pt-1">
+                    <div className="flex items-start justify-between gap-2 text-sm">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        {b.hasActiveSplit ? (
+                          <SplitSquareHorizontal size={16} className="text-primary shrink-0" />
+                        ) : (
+                          <button
+                            onClick={() => handleTogglePaid(b.id, b.paidThisMonth)}
+                            className="p-2.5 touch-manipulation"
+                            aria-label={b.paidThisMonth ? "Mark unpaid" : "Mark paid"}
+                          >
+                            {b.paidThisMonth ? (
+                              <CheckCircle2 size={22} className="text-primary" />
+                            ) : (
+                              <Circle size={22} className="text-muted-foreground/40" />
+                            )}
+                          </button>
+                        )}
+                        <div className="flex flex-col min-w-0">
+                          <span
+                            className={`font-medium flex items-center gap-1.5 ${
+                              b.paidThisMonth ? "text-muted-foreground line-through" : ""
+                            } ${(b.isOverdue || b.previousMonthUnpaid || !!b.previousSplitGroupId) ? "text-red-600 font-bold" : ""}`}
+                          >
+                            {b.name}
+                            {b.hasActiveSplit && (
+                              <SplitSquareHorizontal size={13} className="text-primary" />
+                            )}
+                            {b.hasLateSplit && <AlertTriangle size={13} className="text-yellow-600" />}
+                            {(b.isOverdue || b.previousMonthUnpaid || !!b.previousSplitGroupId) && (
+                              <AlertTriangle size={13} className="text-red-500" />
+                            )}
+                            {needsBillReview && (
+                              <button
+                                onClick={() =>
+                                  setReviewingBillId(reviewingBillId === b.id ? null : b.id)
+                                }
+                                title="This bill has an earlier occurrence that needs your confirmation"
+                              >
+                                <HelpCircle size={13} className="text-blue-500" />
+                              </button>
+                            )}
+                          </span>
+                          <span className="text-xs text-muted-foreground flex items-center gap-1">
+                            {getCategoryIcon(b.category)}
+                            Due {b.dueDate}
+                            {b.category && ` · ${b.category}`}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {b.paidThisMonth && b.paidAmount != null && Number(b.paidAmount) !== Number(b.amount) ? (
+                          (() => {
+                            const paidMore = Number(b.paidAmount) > Number(b.amount);
+                            const colorClass = paidMore ? "text-red-500" : "text-green-600";
+                            return (
+                              <span className="flex flex-col items-end min-w-[70px]">
+                                <span className={`text-xs line-through ${colorClass}`}>
+                                  ${Number(b.amount).toFixed(2)}
+                                </span>
+                                <span className={`font-semibold ${colorClass}`}>
+                                  ${Number(b.paidAmount).toFixed(2)}
+                                </span>
+                              </span>
+                            );
+                          })()
+                        ) : (
+                          <span className="font-semibold min-w-[70px] text-right inline-block">
+                            ${Number(b.amount).toFixed(2)}
+                          </span>
+                        )}
+                        <button
+                          onClick={() => setMenuBillId(b.id)}
+                          className="text-muted-foreground/50 hover:text-primary transition-colors p-2.5 touch-manipulation"
+                          aria-label="Bill options"
+                        >
+                          <MoreVertical size={20} />
+                        </button>
+                      </div>
+                    </div>
+                    {reviewingBillId === b.id && reviewItem && (
+                      <div className="ml-6 mt-1.5 rounded-md border border-blue-200 bg-blue-50 p-2 text-xs space-y-2">
+                        <p>
+                          Was {reviewItem.billName} paid for{" "}
+                          {new Date(reviewItem.dueDate).toLocaleDateString(undefined, {
+                            timeZone: "UTC",
+                          })}
+                          ?
+                        </p>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => handleResolveNeedsReview(b.id, true)}
+                          >
+                            Paid
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs"
+                            onClick={() => handleResolveNeedsReview(b.id, false)}
+                          >
+                            Not yet
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                    {b.hasActiveSplit && splitLegs.length > 0 && (
+                      <div className="ml-6 mt-1.5 space-y-1">
+                        {splitLegs.map((leg) => {
+                          const legPaid = leg.status === "PAID";
+                          const legPaidDifferent =
+                            legPaid &&
+                            leg.paidAmount != null &&
+                            Number(leg.paidAmount) !== Number(leg.amount);
+                          return (
+                            <div key={leg.id} className="flex items-center justify-between gap-2 text-xs">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => handleToggleSplitPaymentPaid(leg.id, legPaid)}
+                                  className="p-2 touch-manipulation"
+                                  aria-label={legPaid ? "Mark leg unpaid" : "Mark leg paid"}
+                                >
+                                  {legPaid ? (
+                                    <CheckCircle2 size={18} className="text-primary" />
+                                  ) : (
+                                    <Circle size={18} className="text-muted-foreground/40" />
+                                  )}
+                                </button>
+                                <span className={legPaid ? "text-muted-foreground line-through" : "text-muted-foreground"}>
+                                  {leg.paidDate &&
+                                    new Date(leg.paidDate).toLocaleDateString(undefined, { timeZone: "UTC" })}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {legPaidDifferent ? (
+                                  (() => {
+                                    const paidMore = Number(leg.paidAmount) > Number(leg.amount);
+                                    const colorClass = paidMore ? "text-red-500" : "text-green-600";
+                                    return (
+                                      <span className="flex flex-col items-end">
+                                        <span className={`line-through ${colorClass}`}>
+                                          ${Number(leg.amount).toFixed(2)}
+                                        </span>
+                                        <span className={`font-medium ${colorClass}`}>
+                                          ${Number(leg.paidAmount).toFixed(2)}
+                                        </span>
+                                      </span>
+                                    );
+                                  })()
+                                ) : (
+                                  <span className="font-medium">${Number(leg.amount).toFixed(2)}</span>
+                                )}
+                                <button
+                                  onClick={() => setPayingLegId(leg.id)}
+                                  className="text-muted-foreground/50 hover:text-primary transition-colors p-2"
+                                  aria-label="Edit paid amount"
+                                >
+                                  <Pencil size={16} />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              <form onSubmit={handleAddBill} className="space-y-2 pt-2">
+                <Input
+                  name="name"
+                  placeholder="Bill name"
+                  required
+                  onChange={(e) => {
+                    const suggestion = suggestCategory(e.target.value);
+                    const categoryInput = e.currentTarget.form?.elements.namedItem(
+                      "category"
+                    ) as HTMLInputElement;
+                    if (suggestion && categoryInput && !categoryInput.dataset.userEdited) {
+                      categoryInput.value = suggestion;
+                    }
+                  }}
+                />
+                <Input name="amount" type="number" step="0.01" placeholder="Amount" required />
+                <div>
+                  <Label className="text-xs text-muted-foreground">Due date</Label>
+                  <DayOfMonthPicker name="dueDate" />
                 </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+                <Input
+                  name="category"
+                  placeholder="Category (auto-suggested as you type)"
+                  onChange={(e) => {
+                    e.currentTarget.dataset.userEdited = "true";
+                  }}
+                />
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" name="splittable" />
+                  Splittable into two payments
+                </label>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">When is this paid?</Label>
+                  <select
+                    name="fundingModel"
+                    defaultValue="BEFORE_DUE"
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+                  >
+                    <option value="BEFORE_DUE">Paid on time, before it's due</option>
+                    <option value="NEXT_CHECK">Paid from my next paycheck, even if that's a few days late</option>
+                  </select>
+                </div>
+                <Button type="submit" className="w-full font-semibold">
+                  Add Bill
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </>
       )}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+
+      {activeTab === "income" && (
         <Card className="shadow-sm border-border/50 py-6">
           <CardHeader>
             <CardTitle>Income Sources</CardTitle>
@@ -794,15 +998,15 @@ style={{ scrollSnapAlign: "center", flex: "0 0 100%" }}
                   </span>
                   <button
                     onClick={() => setEditingIncomeId(i.id)}
-                    className="text-muted-foreground/50 hover:text-primary transition-colors"
+                    className="text-muted-foreground/50 hover:text-primary transition-colors p-2"
                   >
-                    <Pencil size={14} />
+                    <Pencil size={16} />
                   </button>
                   <button
                     onClick={() => handleDeleteIncome(i.id)}
-                    className="text-muted-foreground/50 hover:text-destructive transition-colors"
+                    className="text-muted-foreground/50 hover:text-destructive transition-colors p-2"
                   >
-                    <Trash2 size={14} />
+                    <Trash2 size={16} />
                   </button>
                 </div>
               </div>
@@ -830,250 +1034,96 @@ style={{ scrollSnapAlign: "center", flex: "0 0 100%" }}
             </form>
           </CardContent>
         </Card>
+      )}
+
+      {activeTab === "periods" && periods.length > 0 && (
         <Card className="shadow-sm border-border/50 py-6">
           <CardHeader>
-            <CardTitle>Bills</CardTitle>
+            <CardTitle>Upcoming Pay Periods</CardTitle>
+            <CardDescription>Swipe to see each period — based on your pay schedule and bills</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <form onSubmit={handleQuickSpend} className="rounded-md border border-dashed p-3 space-y-2 bg-muted/30">
-              <p className="text-xs font-medium text-muted-foreground">Quick Spend — log something you already paid</p>
-              <Input name="name" placeholder="What was it?" required />
-              <Input name="amount" type="number" step="0.01" placeholder="Amount" required />
-              <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                <input type="checkbox" name="isRecurring" />
-                This is recurring — add it to my regular budgeted bills
-              </label>
-              <Button type="submit" size="sm" variant="outline" className="w-full font-semibold">
-                Log Expense
-              </Button>
-            </form>
-            {bills.map((b) => {
-              const relevantGroupIds = [b.currentSplitGroupId, b.previousSplitGroupId].filter(Boolean);
-              const splitLegs = b.payments.filter(
-                (p) => p.isSplitPayment && relevantGroupIds.includes(p.splitGroupId)
-              );
-              const needsBillReview = needsReviewBillIds.has(b.id);
-              const reviewItem = needsReview.find((n) => n.billId === b.id);
-              return (
-                <div key={b.id} className="border-b pb-3 pt-1">
-                  <div className="flex items-start justify-between gap-2 text-sm">
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      {b.hasActiveSplit ? (
-                        <SplitSquareHorizontal size={16} className="text-primary shrink-0" />
-                      ) : (
-                        <button
-  onClick={() => handleTogglePaid(b.id, b.paidThisMonth)}
-  className="p-2.5 touch-manipulation"
-  aria-label={b.paidThisMonth ? "Mark unpaid" : "Mark paid"}
->
-  {b.paidThisMonth ? (
-    <CheckCircle2 size={22} className="text-primary" />
-  ) : (
-    <Circle size={22} className="text-muted-foreground/40" />
-  )}
-</button>
-                      )}
-                      <div className="flex flex-col min-w-0">
-                        <span
-                          className={`font-medium flex items-center gap-1.5 ${
-                            b.paidThisMonth ? "text-muted-foreground line-through" : ""
-                          } ${(b.isOverdue || b.previousMonthUnpaid || !!b.previousSplitGroupId) ? "text-red-600 font-bold" : ""}`}
-                        >
-                          {b.name}
-                          {b.hasActiveSplit && (
-                            <SplitSquareHorizontal size={13} className="text-primary" />
-                          )}
-                          {b.hasLateSplit && <AlertTriangle size={13} className="text-yellow-600" />}
-                          {(b.isOverdue || b.previousMonthUnpaid || !!b.previousSplitGroupId) && (
-                            <AlertTriangle size={13} className="text-red-500" />
-                          )}
-                          {needsBillReview && (
-                            <button
-                              onClick={() =>
-                                setReviewingBillId(reviewingBillId === b.id ? null : b.id)
-                              }
-                              title="This bill has an earlier occurrence that needs your confirmation"
-                            >
-                              <HelpCircle size={13} className="text-blue-500" />
-                            </button>
-                          )}
-                        </span>
-                        <span className="text-xs text-muted-foreground flex items-center gap-1">
-                          {getCategoryIcon(b.category)}
-                          Due {b.dueDate}
-                          {b.category && ` · ${b.category}`}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {b.paidThisMonth && b.paidAmount != null && Number(b.paidAmount) !== Number(b.amount) ? (
-                        (() => {
-                          const paidMore = Number(b.paidAmount) > Number(b.amount);
-                          const colorClass = paidMore ? "text-red-500" : "text-green-600";
-                          return (
-                            <span className="flex flex-col items-end min-w-[70px]">
-                              <span className={`text-xs line-through ${colorClass}`}>
-                                ${Number(b.amount).toFixed(2)}
-                              </span>
-                              <span className={`font-semibold ${colorClass}`}>
-                                ${Number(b.paidAmount).toFixed(2)}
-                              </span>
-                            </span>
-                          );
-                        })()
-                      ) : (
-                        <span className="font-semibold min-w-[70px] text-right inline-block">
-                          ${Number(b.amount).toFixed(2)}
-                        </span>
-                      )}
-                      <button
-  onClick={() => setMenuBillId(b.id)}
-  className="text-muted-foreground/50 hover:text-primary transition-colors p-2.5 touch-manipulation"
-  aria-label="Bill options"
->
-  <MoreVertical size={20} />
-</button>
-                    </div>
-                  </div>
-                  {reviewingBillId === b.id && reviewItem && (
-                    <div className="ml-6 mt-1.5 rounded-md border border-blue-200 bg-blue-50 p-2 text-xs space-y-2">
-                      <p>
-                        Was {reviewItem.billName} paid for{" "}
-                        {new Date(reviewItem.dueDate).toLocaleDateString(undefined, {
-                          timeZone: "UTC",
-                        })}
-                        ?
-                      </p>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          className="h-7 text-xs"
-                          onClick={() => handleResolveNeedsReview(b.id, true)}
-                        >
-                          Paid
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-xs"
-                          onClick={() => handleResolveNeedsReview(b.id, false)}
-                        >
-                          Not yet
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                  {b.hasActiveSplit && splitLegs.length > 0 && (
-                    <div className="ml-6 mt-1.5 space-y-1">
-                      {splitLegs.map((leg) => {
-                        const legPaid = leg.status === "PAID";
-                        const legPaidDifferent =
-                          legPaid &&
-                          leg.paidAmount != null &&
-                          Number(leg.paidAmount) !== Number(leg.amount);
-                        return (
-                          <div key={leg.id} className="flex items-center justify-between gap-2 text-xs">
-                            <div className="flex items-center gap-2">
-                              <button
-  onClick={() => handleToggleSplitPaymentPaid(leg.id, legPaid)}
-  className="p-2 touch-manipulation"
-  aria-label={legPaid ? "Mark leg unpaid" : "Mark leg paid"}
->
-  {legPaid ? (
-    <CheckCircle2 size={18} className="text-primary" />
-  ) : (
-    <Circle size={18} className="text-muted-foreground/40" />
-  )}
-</button>
-                              <span className={legPaid ? "text-muted-foreground line-through" : "text-muted-foreground"}>
-                                {leg.paidDate &&
-                                  new Date(leg.paidDate).toLocaleDateString(undefined, { timeZone: "UTC" })}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {legPaidDifferent ? (
-                                (() => {
-                                  const paidMore = Number(leg.paidAmount) > Number(leg.amount);
-                                  const colorClass = paidMore ? "text-red-500" : "text-green-600";
-                                  return (
-                                    <span className="flex flex-col items-end">
-                                      <span className={`line-through ${colorClass}`}>
-                                        ${Number(leg.amount).toFixed(2)}
-                                      </span>
-                                      <span className={`font-medium ${colorClass}`}>
-                                        ${Number(leg.paidAmount).toFixed(2)}
-                                      </span>
-                                    </span>
-                                  );
-                                })()
-                              ) : (
-                                <span className="font-medium">${Number(leg.amount).toFixed(2)}</span>
-                              )}
-                              <button
-                                onClick={() => setPayingLegId(leg.id)}
-                                className="text-muted-foreground/50 hover:text-primary transition-colors p-2"
-                                aria-label="Edit paid amount"
-                              >
-                                <Pencil size={16} />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-            <form onSubmit={handleAddBill} className="space-y-2 pt-2">
-              <Input
-                name="name"
-                placeholder="Bill name"
-                required
-                onChange={(e) => {
-                  const suggestion = suggestCategory(e.target.value);
-                  const categoryInput = e.currentTarget.form?.elements.namedItem(
-                    "category"
-                  ) as HTMLInputElement;
-                  if (suggestion && categoryInput && !categoryInput.dataset.userEdited) {
-                    categoryInput.value = suggestion;
-                  }
-                }}
-              />
-              <Input name="amount" type="number" step="0.01" placeholder="Amount" required />
-              <div>
-                <Label className="text-xs text-muted-foreground">Due date</Label>
-                <DayOfMonthPicker name="dueDate" />
-              </div>
-              <Input
-                name="category"
-                placeholder="Category (auto-suggested as you type)"
-                onChange={(e) => {
-                  e.currentTarget.dataset.userEdited = "true";
-                }}
-              />
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" name="splittable" />
-                Splittable into two payments
-              </label>
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">When is this paid?</Label>
-                <select
-                  name="fundingModel"
-                  defaultValue="BEFORE_DUE"
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+          <CardContent>
+            <div
+              className="flex overflow-x-auto snap-x snap-mandatory gap-3 pb-2"
+              style={{ scrollbarWidth: "none" }}
+              onScroll={(e) => {
+                const el = e.currentTarget;
+                const idx = Math.round(el.scrollLeft / el.clientWidth);
+                if (idx !== expandedPeriod && idx >= 0 && idx < periods.length) {
+                  setPeriodCarouselIndex(idx);
+                }
+              }}
+            >
+              {periods.map((p, idx) => (
+                <div
+                  key={idx}
+                  className="snap-center shrink-0 basis-full"
+                  style={{ scrollSnapAlign: "center", flex: "0 0 100%" }}
                 >
-                  <option value="BEFORE_DUE">Paid on time, before it's due</option>
-                  <option value="NEXT_CHECK">Paid from my next paycheck, even if that's a few days late</option>
-                </select>
-              </div>
-              <Button type="submit" className="w-full font-semibold">
-                Add Bill
-              </Button>
-            </form>
+                  <div
+                    className={`rounded-md border text-sm h-full ${
+                      p.isCashflowRisk ? "border-destructive/50 bg-destructive/5" : "border-border"
+                    }`}
+                  >
+                    <button
+                      onClick={() => setExpandedPeriod(expandedPeriod === idx ? null : idx)}
+                      className="flex w-full items-center justify-between gap-2 p-3 text-left flex-wrap"
+                    >
+                      <div>
+                        <div className="font-medium">
+                          {new Date(p.payDate).toLocaleDateString(undefined, { timeZone: "UTC" })}
+                          {p.bonusPaycheckLabels?.map((label: string) => (
+                            <span
+                              key={label}
+                              className="ml-2 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-0.5 tracking-wide align-middle"
+                            >
+                              {label}
+                            </span>
+                          ))}
+                        </div>
+                        <div className="text-muted-foreground text-xs">
+                          {p.bills.length} bill{p.bills.length !== 1 ? "s" : ""} — $
+                          {p.totalBillAmount.toFixed(2)} due
+                        </div>
+                      </div>
+                      {p.isCashflowRisk ? (
+                        <span className="rounded-full bg-destructive/10 text-destructive text-xs font-semibold px-2.5 py-1">
+                          Short ${p.shortfall.toFixed(2)}
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-primary/10 text-primary text-xs font-semibold px-2.5 py-1">
+                          On track
+                        </span>
+                      )}
+                    </button>
+                    {expandedPeriod === idx && p.bills.length > 0 && (
+                      <div className="border-t px-3 py-2 space-y-1 max-h-64 overflow-y-auto">
+                        {p.bills.map((item: any, i: number) => (
+                          <div key={i} className="flex justify-between text-xs text-muted-foreground">
+                            <span className="font-medium">{item.bill.name}</span>
+                            <span className="font-semibold">${item.bill.amount.toFixed(2)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-center gap-1.5 mt-3">
+              {periods.map((_, idx) => (
+                <span
+                  key={idx}
+                  className={`h-1.5 w-1.5 rounded-full transition-colors ${
+                    idx === periodCarouselIndex ? "bg-primary" : "bg-muted"
+                  }`}
+                />
+              ))}
+            </div>
           </CardContent>
         </Card>
-      </div>
+      )}
+
       {dueModalOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
@@ -1121,6 +1171,7 @@ style={{ scrollSnapAlign: "center", flex: "0 0 100%" }}
           </div>
         </div>
       )}
+
       {pastDueModalOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
@@ -1164,6 +1215,7 @@ style={{ scrollSnapAlign: "center", flex: "0 0 100%" }}
           </div>
         </div>
       )}
+
       {editingBill && (
         <EditBillModal
           bill={editingBill}
@@ -1171,6 +1223,7 @@ style={{ scrollSnapAlign: "center", flex: "0 0 100%" }}
           onSave={(updates) => handleUpdateBill(editingBill.id, updates)}
         />
       )}
+
       {editingIncome && (
         <EditIncomeModal
           income={editingIncome}
@@ -1178,6 +1231,7 @@ style={{ scrollSnapAlign: "center", flex: "0 0 100%" }}
           onSave={(updates) => handleUpdateIncome(editingIncome.id, updates)}
         />
       )}
+
       {menuBill && (
         <PayBillMenu
           bill={menuBill}
@@ -1194,6 +1248,7 @@ style={{ scrollSnapAlign: "center", flex: "0 0 100%" }}
           onDelete={() => handleDeleteBill(menuBill.id)}
         />
       )}
+
       {payingLeg && (
         <SplitLegPayModal
           leg={payingLeg}
@@ -1203,6 +1258,7 @@ style={{ scrollSnapAlign: "center", flex: "0 0 100%" }}
           }}
         />
       )}
+
       {monthlyReviewOpen && (
         <MonthlyReviewModal
           bills={monthlyReviewBills}
@@ -1210,36 +1266,13 @@ style={{ scrollSnapAlign: "center", flex: "0 0 100%" }}
           onClose={handleMonthlyReviewClose}
         />
       )}
-    </main>
-  );
-}
-function EditAmountForm({
-  initialValue,
-  onSave,
-  onCancel,
-}: {
-  initialValue: string;
-  onSave: (value: string) => void;
-  onCancel: () => void;
-}) {
-  const [value, setValue] = useState(initialValue);
-  return (
-    <div className="flex items-center gap-1">
-      <Input
-        type="number"
-        step="0.01"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        className="h-7 w-24 text-sm"
-        autoFocus
+
+      <BottomNav
+        active={activeTab}
+        onChange={setActiveTab}
+        billsAlertCount={billsNeedingAttention}
       />
-      <button onClick={() => onSave(value)} className="text-primary hover:opacity-80">
-        <Check size={16} />
-      </button>
-      <button onClick={onCancel} className="text-muted-foreground/50 hover:text-foreground">
-        <X size={16} />
-      </button>
-    </div>
+    </main>
   );
 }
 function getCategoryIcon(category: string | null) {
