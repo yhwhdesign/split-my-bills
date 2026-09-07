@@ -101,7 +101,6 @@ export default function DashboardPage() {
   const [payingLegId, setPayingLegId] = useState<string | null>(null);
   const [menuBillId, setMenuBillId] = useState<string | null>(null);
   const [expandedPeriod, setExpandedPeriod] = useState<number | null>(null);
-  const [periodCarouselIndex, setPeriodCarouselIndex] = useState(0);
   const [reviewingBillId, setReviewingBillId] = useState<string | null>(null);
   const [coaching, setCoaching] = useState<string | null>(null);
   const [coachingLoading, setCoachingLoading] = useState(false);
@@ -434,7 +433,7 @@ export default function DashboardPage() {
   );
 }
   return (
-    <main className="mx-auto max-w-4xl p-4 sm:p-8 space-y-6 sm:space-y-8 pb-24 flex flex-col min-h-screen">
+    <main className="mx-auto max-w-4xl p-4 sm:p-8 space-y-6 sm:space-y-8 pb-24">
       <div className="flex items-center justify-between border-b pb-4">
         <div>
           <Logo />
@@ -1037,93 +1036,64 @@ export default function DashboardPage() {
       )}
 
       {activeTab === "periods" && periods.length > 0 && (
-        <div className="flex-1 flex flex-col items-stretch justify-center">
-        <Card className="shadow-sm border-border/50 py-6 w-full">
+        <Card className="shadow-sm border-border/50 py-6">
           <CardHeader>
             <CardTitle>Upcoming Pay Periods</CardTitle>
-            <CardDescription>Swipe to see each period — based on your pay schedule and bills</CardDescription>
+            <CardDescription>Based on your pay schedule and bills</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div
-              className="flex overflow-x-auto snap-x snap-mandatory gap-3 pb-2"
-              style={{ scrollbarWidth: "none" }}
-              onScroll={(e) => {
-                const el = e.currentTarget;
-                const idx = Math.round(el.scrollLeft / el.clientWidth);
-                if (idx !== expandedPeriod && idx >= 0 && idx < periods.length) {
-                  setPeriodCarouselIndex(idx);
-                }
-              }}
-            >
-              {periods.map((p, idx) => (
-                <div
-                  key={idx}
-                  className="snap-center shrink-0 basis-full"
-                  style={{ scrollSnapAlign: "center", flex: "0 0 100%" }}
+          <CardContent className="space-y-3">
+            {periods.map((p, idx) => (
+              <div
+                key={idx}
+                className={`rounded-md border text-sm ${
+                  p.isCashflowRisk ? "border-destructive/50 bg-destructive/5" : "border-border"
+                }`}
+              >
+                <button
+                  onClick={() => setExpandedPeriod(expandedPeriod === idx ? null : idx)}
+                  className="flex w-full items-center justify-between gap-2 p-3 text-left flex-wrap"
                 >
-                  <div
-                    className={`rounded-md border text-sm h-full ${
-                      p.isCashflowRisk ? "border-destructive/50 bg-destructive/5" : "border-border"
-                    }`}
-                  >
-                    <button
-                      onClick={() => setExpandedPeriod(expandedPeriod === idx ? null : idx)}
-                      className="flex w-full items-center justify-between gap-2 p-3 text-left flex-wrap"
-                    >
-                      <div>
-                        <div className="font-medium">
-                          {new Date(p.payDate).toLocaleDateString(undefined, { timeZone: "UTC" })}
-                          {p.bonusPaycheckLabels?.map((label: string) => (
-                            <span
-                              key={label}
-                              className="ml-2 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-0.5 tracking-wide align-middle"
-                            >
-                              {label}
-                            </span>
-                          ))}
-                        </div>
-                        <div className="text-muted-foreground text-xs">
-                          {p.bills.length} bill{p.bills.length !== 1 ? "s" : ""} — $
-                          {p.totalBillAmount.toFixed(2)} due
-                        </div>
-                      </div>
-                      {p.isCashflowRisk ? (
-                        <span className="rounded-full bg-destructive/10 text-destructive text-xs font-semibold px-2.5 py-1">
-                          Short ${p.shortfall.toFixed(2)}
+                  <div>
+                    <div className="font-medium">
+                      {new Date(p.payDate).toLocaleDateString(undefined, { timeZone: "UTC" })}
+                      {p.bonusPaycheckLabels?.map((label: string) => (
+                        <span
+                          key={label}
+                          className="ml-2 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-0.5 tracking-wide align-middle"
+                        >
+                          {label}
                         </span>
-                      ) : (
-                        <span className="rounded-full bg-primary/10 text-primary text-xs font-semibold px-2.5 py-1">
-                          On track
-                        </span>
-                      )}
-                    </button>
-                    {expandedPeriod === idx && p.bills.length > 0 && (
-                      <div className="border-t px-3 py-2 space-y-1 max-h-64 overflow-y-auto">
-                        {p.bills.map((item: any, i: number) => (
-                          <div key={i} className="flex justify-between text-xs text-muted-foreground">
-                            <span className="font-medium">{item.bill.name}</span>
-                            <span className="font-semibold">${item.bill.amount.toFixed(2)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                      ))}
+                    </div>
+                    <div className="text-muted-foreground text-xs">
+                      {p.bills.length} bill{p.bills.length !== 1 ? "s" : ""} — $
+                      {p.totalBillAmount.toFixed(2)} due
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-            <div className="flex justify-center gap-1.5 mt-3">
-              {periods.map((_, idx) => (
-                <span
-                  key={idx}
-                  className={`h-1.5 w-1.5 rounded-full transition-colors ${
-                    idx === periodCarouselIndex ? "bg-primary" : "bg-muted"
-                  }`}
-                />
-              ))}
-            </div>
+                  {p.isCashflowRisk ? (
+                    <span className="rounded-full bg-destructive/10 text-destructive text-xs font-semibold px-2.5 py-1">
+                      Short ${p.shortfall.toFixed(2)}
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-primary/10 text-primary text-xs font-semibold px-2.5 py-1">
+                      On track
+                    </span>
+                  )}
+                </button>
+                {expandedPeriod === idx && p.bills.length > 0 && (
+                  <div className="border-t px-3 py-2 space-y-1">
+                    {p.bills.map((item: any, i: number) => (
+                      <div key={i} className="flex justify-between text-xs text-muted-foreground">
+                        <span className="font-medium">{item.bill.name}</span>
+                        <span className="font-semibold">${item.bill.amount.toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
           </CardContent>
         </Card>
-        </div>
       )}
 
       {dueModalOpen && (
