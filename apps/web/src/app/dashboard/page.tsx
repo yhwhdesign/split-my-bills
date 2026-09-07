@@ -97,6 +97,7 @@ export default function DashboardPage() {
   const [periods, setPeriods] = useState<any[]>([]);
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [opportunities, setOpportunities] = useState<any[]>([]);
+  const [billFundingRecommendations, setBillFundingRecommendations] = useState<any[]>([]);
   const [needsReview, setNeedsReview] = useState<NeedsReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingIncomeId, setEditingIncomeId] = useState<string | null>(null);
@@ -167,6 +168,7 @@ export default function DashboardPage() {
     setPeriods(periodsData.periods ?? []);
     setSuggestions(periodsData.suggestions ?? []);
     setOpportunities(periodsData.opportunities ?? []);
+    setBillFundingRecommendations(periodsData.billFundingRecommendations ?? []);
     setNeedsReview(periodsData.needsReview ?? []);
     const userData = await userRes.json();
     setUserName(userData.name ?? null);
@@ -796,6 +798,30 @@ style={{ scrollSnapAlign: "center", flex: "0 0 100%" }}
           </CardContent>
         </Card>
       )}
+
+      {billFundingRecommendations.length > 0 && (
+  <Card className="border-yellow-500/30 bg-yellow-500/5 shadow-sm py-6">
+    <CardHeader>
+      <CardTitle>Use This Extra Paycheck</CardTitle>
+      <CardDescription>
+        A bill needs this paycheck to avoid going significantly late
+      </CardDescription>
+    </CardHeader>
+    <CardContent className="space-y-3">
+      {billFundingRecommendations.map((r: any, idx: number) => (
+        <div key={idx} className="rounded-md border border-yellow-500/20 bg-background p-3 text-sm">
+          <div className="flex items-center justify-between">
+            <span className="font-medium">{r.billName}</span>
+            <span className="text-xs font-semibold text-yellow-600">
+              ${Number(r.billAmount).toFixed(2)}
+            </span>
+          </div>
+          <p className="text-muted-foreground text-xs mt-1">{r.reasoning}</p>
+        </div>
+      ))}
+    </CardContent>
+  </Card>
+)}
 
       {opportunities.length > 0 && (
         <Card className="border-primary/30 bg-primary/5 shadow-sm py-6">

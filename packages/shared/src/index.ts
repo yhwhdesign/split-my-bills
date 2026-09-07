@@ -235,16 +235,17 @@ export interface PaidOccurrence {
   date: Date;
 }
 
-export function calculatePayPeriods(
+/**
+ * Computes which specific real paydays count as "extra" (3PD/5PD) for each
+ * income source, independently. Extracted out of calculatePayPeriods() so
+ * this exact same logic can also be used by
+ * generateBillFundingRecommendations() below — two separate copies of this
+ * math would risk quietly disagreeing with each other over time.
+ */
+export function computeBonusPaycheckLabels(
   incomeSources: IncomeSourceInput[],
-  bills: Bill[],
-  windowDays: number = 90,
-  splitOverrides: SplitPaymentOverride[] = [],
-  paidOccurrences: PaidOccurrence[] = []
-): PayPeriod[] {
-  const combined = getCombinedPayDates(incomeSources, windowDays, true);
-  const payDates = combined.map((c) => c.date);
-
+  windowDays: number
+): Map<string, Set<string>> {
   const extraPaycheckThreshold = (schedule: PaySchedule): number | null => {
     switch (schedule) {
       case "BIWEEKLY":
@@ -266,6 +267,10 @@ export function calculatePayPeriods(
     const threshold = extraPaycheckThreshold(source.paySchedule);
     if (threshold === null) continue;
 
+    // Widen the window here specifically — a month sitting near the edge of
+    // the normal period-generation window could have its bonus payday fall
+    // just past the cutoff, undercounting it. Padding by 45 extra days
+    // guarantees any month we might report on is fully captured.
     const sourceDates = getUpcomingPayDates(
       source.paySchedule,
       source.anchorDate,
@@ -286,6 +291,24 @@ export function calculatePayPeriods(
       }
     }
   }
+
+  return bonusLabelsByDate;
+}
+
+export function calculatePayPeriods(
+  incomeSources: IncomeSourceInput[],
+  bills: Bill[],
+  windowDays: number = 90,
+  splitOverrides: SplitPaymentOverride[] = [],
+  paidOccurrences: PaidOccurrence[] = []
+): PayPeriod[] {
+  const combined = getCombinedPayDates(incomeSources, windowDays, true);
+  const payDates = combined.map((c) => c.date);
+
+  const dayKey = (d: Date) =>
+    `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+
+  const bonusLabelsByDate = computeBonusPaycheckLabels(incomeSources, windowDays);
 
   const overriddenBillIds = new Set(splitOverrides.map((o) => o.billId));
 
@@ -494,6 +517,83 @@ export function generateOpportunitySuggestions(periods: PayPeriod[]): Opportunit
   return suggestions;
 }
 
+export interface BillFundingRecommendation {
+  billId: string;
+  billName: string;
+  billAmount: number;
+  dueDate: Date;
+  extraPayDate: Date;
+  bonusPaycheckLabels: string[];
+  normalFundingDate: Date;
+  daysLateWithoutExtra: number;
+  reasoning: string;
+}
+
+/**
+ * For each bill (excluding split bills due the 1st — that date is a
+ * formality for them, not a real deadline, per how NEXT_CHECK split
+ * funding actually works), checks: if we ignore any "extra" paychecks,
+ * how many days would pass between this bill's due date and the next
+ * NORMAL paycheck? If that gap exceeds the threshold, and a real extra
+ * paycheck falls within that gap, recommend using that extra paycheck to
+ * fund this specific bill — rather than just suggesting it as savings
+ * potential, since a genuinely at-risk bill takes priority.
+ */
+export function generateBillFundingRecommendations(
+  incomeSources: IncomeSourceInput[],
+  bills: Bill[],
+  windowDays: number = 90,
+  lateDaysThreshold: number = 10
+): BillFundingRecommendation[] {
+  const combined = getCombinedPayDates(incomeSources, windowDays, true);
+  const bonusLabels = computeBonusPaycheckLabels(incomeSources, windowDays);
+
+  const dayKey = (d: Date) =>
+    `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+
+  const isExtra = (d: Date) => bonusLabels.has(dayKey(d));
+
+  const recommendations: BillFundingRecommendation[] = [];
+
+  for (const bill of bills) {
+    if (bill.splittable && bill.dueDate === 1) continue;
+
+    const dueDate = getCurrentOccurrence(bill.dueDate);
+
+    const upcoming = combined
+      .map((c) => c.date)
+      .filter((d) => d >= dueDate)
+      .sort((a, b) => a.getTime() - b.getTime());
+
+    const normalFundingDate = upcoming.find((d) => !isExtra(d));
+    if (!normalFundingDate) continue;
+
+    const daysGap = Math.round(
+      (normalFundingDate.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)
+    );
+    if (daysGap <= lateDaysThreshold) continue;
+
+    const rescuingExtra = upcoming.find((d) => isExtra(d) && d < normalFundingDate);
+    if (!rescuingExtra) continue;
+
+    const labels = Array.from(bonusLabels.get(dayKey(rescuingExtra)) ?? []);
+
+    recommendations.push({
+      billId: bill.id,
+      billName: bill.name,
+      billAmount: bill.amount,
+      dueDate,
+      extraPayDate: rescuingExtra,
+      bonusPaycheckLabels: labels,
+      normalFundingDate,
+      daysLateWithoutExtra: daysGap,
+      reasoning: `Without this extra paycheck, ${bill.name} wouldn't be funded until ${normalFundingDate.toDateString()} — ${daysGap} days after it's due. Using this ${labels.join("/")} paycheck keeps it from going that late.`,
+    });
+  }
+
+  return recommendations;
+}
+
 export interface SplitPaymentPlan {
   date: Date;
   amount: number;
@@ -536,10 +636,7 @@ export function pickSplitDates(
  * numeric "due date" is really just which cycle it belongs to, not a
  * strict deadline. The real question is which real paychecks arrive
  * DURING that same calendar month, since that's what's actually available
- * to pay it with. Unlike pickSplitDates() (which always looks BACKWARD
- * from the due date), this looks at the bill's own current month as a
- * whole, so a bill "due the 1st" funded by NEXT_CHECK correctly uses that
- * month's own two real paydays (e.g. 9/4 and 9/18), not the prior month's.
+ * to pay it with.
  */
 export function pickSplitDatesForCurrentMonth(
   occurrenceDate: Date,
@@ -588,14 +685,6 @@ export function planBillSplit(
  * everywhere a group's dates need interpreting (recurring-split
  * generation AND overdue detection), or the two systems will disagree
  * about which cycle a group belongs to.
- *
- * BEFORE_DUE legs are always dated BEFORE the due date they fund — find
- * the next real due-date occurrence on or after the latest leg.
- *
- * NEXT_CHECK legs fall WITHIN the same calendar month as the bill they
- * fund — so the funded occurrence is simply that month's due date,
- * regardless of whether the leg date is numerically before or after the
- * due date itself.
  */
 export function occurrenceFundedByGroup(
   dueDate: number,
