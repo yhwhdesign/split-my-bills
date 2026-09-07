@@ -585,3 +585,31 @@ whole problem by restoring more actual content to the screen, rather than contin
 the empty-space symptom with layout tricks.
 
 **Last updated:** 2026-09-07
+
+---
+
+## Addendum — 2026-09-07, session close
+
+**Hero card math review (item #1 from the earlier backlog) completed via code trace**, given
+session time constraints — no issues found. Verified: Total Bills This Month and Projected
+Income are both untouched by today's changes and remain correct. Due Before Next Payday
+correctly combines `currentPeriod.bills` + `needsReview` + unresolved split legs +
+`previousMonthUnpaid` bills with no double-counting (previousMonthUnpaid already excludes
+anything in needsReview; split bills are excluded from needsReview entirely and tracked
+separately). Projected Remaining correctly subtracts that same combined unresolved total.
+
+**Decision**: rather than open a deeper investigation this late in a long session, the user
+will use the app in real-world daily use going forward and bring back any actual issues or
+concerns that surface — a better use of time than a further code-only review with nothing
+concrete to react to.
+
+**Session summary**: this was an exceptionally long, high-value session — the real
+`NEXT_CHECK` split-funding bug (root-caused after a long, costly back-and-forth), the
+cross-bill payday coordination feature, and a genuine mobile-native redesign (bottom tab
+navigation, real tap targets, the viewport root cause) were all completed and verified.
+
+**Remaining backlog:**
+1. **Future "savings" feature** — deferred, tied to an eventual bank-statement upload
+   capability, not started, no dependencies built.
+
+**Last updated:** 2026-09-07 (session close)
