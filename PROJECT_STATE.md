@@ -422,3 +422,58 @@ Picking up fresh (new day, explicit ask to move a bit faster while still learnin
 thoroughly). Next up, per the standing backlog: a careful, unhurried review of the hero
 card's Total Bills and Remaining box logic/output — not a known bug, just verifying
 correctness given how much has changed underneath these figures across sessions.
+
+
+---
+
+## Addendum — 2026-09-07 (real NEXT_CHECK split-funding bug found and fixed)
+
+**Root cause, finally identified after a long, costly back-and-forth**: split-bill date
+selection never accounted for `fundingModel`. A `NEXT_CHECK` bill is meant to be funded by
+whatever real paychecks land within its own current month — even if that's technically after
+its numeric due date — but the code always used the same backward-looking logic as
+`BEFORE_DUE` bills, incorrectly pulling prior-month paydays for early-due-date `NEXT_CHECK`
+bills. This was only correctly identified after the user repeatedly and correctly pushed
+back that "the paydays drive when bills get paid, not the due date" — a real, previously
+unaccounted-for distinction, not the "this is mathematically unavoidable" explanation given
+several times earlier (which was true for `BEFORE_DUE`, but wrong for `NEXT_CHECK`).
+
+**The fix required two consistent halves — a real near-miss caught by the user's own sharp
+question ("won't this break late detection?"):**
+1. **`pickSplitDatesForCurrentMonth()`** (new, shared package) — used only for `NEXT_CHECK`
+   bills, picks real paydays within the bill's own current calendar month instead of before
+   its due date.
+2. **`occurrenceFundedByGroup()`** (new, shared package, `fundingModel`-aware) — used
+   **identically** by both `ensureRecurringSplits()` (generation) and `GET /api/bills`
+   (overdue detection) to interpret which cycle a group's dates belong to. Fixing only #1
+   without #2 would have made the app silently misattribute `NEXT_CHECK` groups to the wrong
+   month and miss real late bills — exactly the failure the user was right to flag before
+   either half was applied.
+
+**Files changed (all full-file replacements, given the day's trust issues)**:
+`packages/shared/src/index.ts`, `apps/web/src/lib/split-bill.ts`,
+`apps/web/src/app/api/split-suggestions/route.ts`, `apps/web/src/app/api/bills/route.ts`.
+
+**A costly same-day detour, fully reverted**: an earlier attempt at a "global reset" system
+(`User.currentCycleStartedAt`, redefining "paid" as "created since cycle start") was built,
+found to instantly break ALL pre-existing payment history the moment it deployed (since
+`cycleStart` defaults to migration-time, and nothing created before that could ever match),
+and was fully reverted back to the proven date/occurrence-based system. The
+`currentCycleStartedAt` field may still exist unused in the schema — not deleted, just no
+longer called from anywhere.
+
+**Real test-data contamination found and cleaned**: ~25 `Payment` rows across September were
+created in one continuous ~90-second window (one per second) — the unmistakable signature of
+an old batch/test script, not real clicks. Given the scale of accumulated test debris across
+many days of development, the user ultimately chose to wipe the entire `Payment` table (bills
+and income sources untouched) to start genuinely clean. A follow-on bug from that wipe
+(`previousMonthUnpaid` firing for every bill since none had any paid history to compare
+against) was found and fixed — it now requires at least one real `PAID` record to exist
+before it can ever fire.
+
+**Real lesson for future sessions**: when a user keeps rejecting the same explanation after
+multiple attempts, stop repeating it and actively look for a genuine distinction in their
+requirements that hasn't been accounted for yet, rather than assuming they simply haven't
+understood. This session's multi-hour loop was caused by exactly that mistake.
+
+**Last updated:** 2026-09-07

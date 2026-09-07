@@ -33,12 +33,6 @@ export function getUpcomingPayDates(
   const endWindow = new Date(today);
   endWindow.setUTCDate(endWindow.getUTCDate() + windowDays);
 
-  // Normalize to the most recent occurrence on/before today first, whether
-  // the stored anchor itself happens to be in the past or the future.
-  // Without this, a perfectly normal future-dated "next pay date" (e.g.
-  // someone's actual upcoming paycheck) would cause this function to skip
-  // right past a real prior payday, since it previously only ever walked
-  // FORWARD from the anchor and had no way to discover an earlier one.
   let current = new Date(anchorDate);
   while (current > today) {
     current = retreatPayDate(current, paySchedule);
@@ -64,7 +58,7 @@ export function getUpcomingPayDates(
 }
 
 export interface PayMonthGroup {
-  month: string; // e.g. "2026-08"
+  month: string;
   payDates: Date[];
   isThreePaycheckMonth: boolean;
 }
@@ -99,9 +93,6 @@ function advancePayDate(date: Date, schedule: PaySchedule): Date {
       next.setUTCMonth(next.getUTCMonth() + 1);
       break;
     case "SEMIMONTHLY":
-      // Semimonthly is trickier — typically the 1st and 15th of each month,
-      // not a fixed number of days apart. We advance by ~15 days as an approximation,
-      // then snap to whichever is closer: the 1st or the 15th.
       if (next.getUTCDate() < 15) {
         next.setUTCDate(15);
       } else {
@@ -163,12 +154,6 @@ export function projectBillDueDates(dueDate: number, windowDays: number = 60): D
   return dates;
 }
 
-/**
- * Merges every income source's own real payday sequence into one combined,
- * chronologically sorted timeline. If two sources happen to pay on the exact
- * same calendar day, that day appears once, with both amounts summed —
- * never as two separate zero-length periods.
- */
 export function getCombinedPayDates(
   incomeSources: IncomeSourceInput[],
   windowDays: number = 60,
@@ -203,12 +188,6 @@ export function getCombinedPayDates(
   return merged;
 }
 
-/**
- * Same idea as getCombinedPayDates, but for a specific past/future date range
- * (used by split-payment date selection) rather than "from today forward."
- * Returns plain dates — split payments divide a bill's amount in half
- * regardless of which income source's paycheck lands on a given date.
- */
 export function getCombinedPayDatesInRange(
   incomeSources: IncomeSourceInput[],
   rangeStart: Date,
@@ -266,16 +245,6 @@ export function calculatePayPeriods(
   const combined = getCombinedPayDates(incomeSources, windowDays, true);
   const payDates = combined.map((c) => c.date);
 
-  // An "extra paycheck" is schedule-specific: biweekly normally produces
-  // 2/month, occasionally 3 (the 3rd is labeled "3PD"); weekly normally
-  // produces 4/month, occasionally 5 (the 5th is labeled "5PD"). Semimonthly
-  // and monthly always produce the same count every month, so they never
-  // qualify. Only the SPECIFIC occurrence(s) beyond a source's normal count
-  // get tagged — e.g. in a 3-paycheck month, only the 3rd biweekly check is
-  // "extra"; the first two are ordinary paychecks. Evaluated completely
-  // independently per source, so a weekly bonus never affects a biweekly
-  // date or vice versa. If two sources both land their own bonus on the
-  // exact same calendar day, that day carries both labels.
   const extraPaycheckThreshold = (schedule: PaySchedule): number | null => {
     switch (schedule) {
       case "BIWEEKLY":
@@ -297,10 +266,6 @@ export function calculatePayPeriods(
     const threshold = extraPaycheckThreshold(source.paySchedule);
     if (threshold === null) continue;
 
-    // Widen the window here specifically — a month sitting near the edge of
-    // the normal period-generation window could have its bonus payday fall
-    // just past the cutoff, undercounting it. Padding by 45 extra days
-    // guarantees any month we might report on is fully captured.
     const sourceDates = getUpcomingPayDates(
       source.paySchedule,
       source.anchorDate,
@@ -336,18 +301,10 @@ export function calculatePayPeriods(
   const billDueDates = bills
     .filter((bill) => !overriddenBillIds.has(bill.id))
     .map((bill) => {
-      // A non-recurring bill (a one-time "quick spend") should only ever
-      // have ONE relevant occurrence — the current cycle's — not repeat
-      // forever the way a normal recurring bill's due date does.
       const projected = bill.isRecurring
         ? projectBillDueDates(bill.dueDate, windowDays)
         : [getCurrentOccurrence(bill.dueDate)];
 
-      // Always also consider the CURRENT cycle's occurrence as a placement
-      // candidate, even if it's already overdue relative to today —
-      // projectBillDueDates() is forward-only and would otherwise skip
-      // straight to next month, leaving a genuinely still-outstanding
-      // overdue bill invisible to every period entirely.
       const current = getCurrentOccurrence(bill.dueDate);
       const alreadyIncluded = projected.some(
         (d) =>
@@ -513,11 +470,9 @@ export function generateOpportunitySuggestions(periods: PayPeriod[]): Opportunit
     const period = periods[i];
     if (!period.isThreePaycheckMonth || period.isCashflowRisk) continue;
 
-    // This paycheck's "extra" amount is whatever's left after this period's own bills
     const surplus = period.income - period.totalBillAmount;
     if (surplus <= 0) continue;
 
-    // Look ahead: is there a leaner period coming up (income covers bills, but with little room)?
     const nextPeriod = periods[i + 1];
     let reasoning = `This is an extra paycheck this month — you have $${period.income.toFixed(2)} beyond your usual bills this period, leaving about $${surplus.toFixed(2)} free.`;
 
@@ -559,10 +514,9 @@ export function nextOccurrenceOnOrAfter(dueDate: number, afterDate: Date): Date 
 }
 
 /**
- * Picks the two dates that fund a split bill, drawing from the FULL combined
- * pool of every income source's real paydays — not just one person's
- * schedule. Anchored to the bill's due date, not today's date, so it works
- * correctly regardless of when someone happens to open the app.
+ * Picks the two dates that fund a BEFORE_DUE split bill, drawing from the
+ * FULL combined pool of every income source's real paydays. Pay ahead of
+ * the due date using whichever two real paydays came right before it.
  */
 export function pickSplitDates(
   dueDate: Date,
@@ -577,21 +531,43 @@ export function pickSplitDates(
   return [chosen[0] ?? dueDate, chosen[1] ?? chosen[0] ?? dueDate];
 }
 
+/**
+ * Picks the two dates that fund a NEXT_CHECK split bill — the bill's own
+ * numeric "due date" is really just which cycle it belongs to, not a
+ * strict deadline. The real question is which real paychecks arrive
+ * DURING that same calendar month, since that's what's actually available
+ * to pay it with. Unlike pickSplitDates() (which always looks BACKWARD
+ * from the due date), this looks at the bill's own current month as a
+ * whole, so a bill "due the 1st" funded by NEXT_CHECK correctly uses that
+ * month's own two real paydays (e.g. 9/4 and 9/18), not the prior month's.
+ */
+export function pickSplitDatesForCurrentMonth(
+  occurrenceDate: Date,
+  incomeSources: IncomeSourceInput[]
+): [Date, Date] {
+  const monthStart = new Date(
+    Date.UTC(occurrenceDate.getUTCFullYear(), occurrenceDate.getUTCMonth(), 1)
+  );
+  const monthEnd = new Date(
+    Date.UTC(occurrenceDate.getUTCFullYear(), occurrenceDate.getUTCMonth() + 1, 0)
+  );
+
+  const payDates = getCombinedPayDatesInRange(incomeSources, monthStart, monthEnd);
+  const chosen = payDates.slice(0, 2);
+
+  return [chosen[0] ?? occurrenceDate, chosen[1] ?? chosen[0] ?? occurrenceDate];
+}
+
 export function planBillSplit(
   bill: Bill,
   incomeSources: IncomeSourceInput[]
 ): SplitPlan {
-  // Deliberately NOT projectBillDueDates() here — that function always skips
-  // forward past a due date already in the past relative to today, which is
-  // correct for "what's coming up next" but wrong for "which occurrence
-  // should this split fund." A bill added after its due date has already
-  // passed this cycle still needs THIS cycle's occurrence funded — not
-  // silently pushed to next month. getCurrentOccurrence() always returns
-  // the current month's occurrence regardless of past/future, matching the
-  // same semantics already used for paid-status tracking elsewhere.
   const dueDate = getCurrentOccurrence(bill.dueDate);
 
-  const [firstDate, secondDate] = pickSplitDates(dueDate, incomeSources);
+  const [firstDate, secondDate] =
+    bill.fundingModel === "NEXT_CHECK"
+      ? pickSplitDatesForCurrentMonth(dueDate, incomeSources)
+      : pickSplitDates(dueDate, incomeSources);
 
   const half = bill.amount / 2;
   const makePayment = (date: Date): SplitPaymentPlan => ({
@@ -604,6 +580,34 @@ export function planBillSplit(
     firstPayment: makePayment(firstDate),
     secondPayment: makePayment(secondDate),
   };
+}
+
+/**
+ * Given the latest leg date in a split group, figures out which bill
+ * occurrence (month) that group actually funds — MUST be used identically
+ * everywhere a group's dates need interpreting (recurring-split
+ * generation AND overdue detection), or the two systems will disagree
+ * about which cycle a group belongs to.
+ *
+ * BEFORE_DUE legs are always dated BEFORE the due date they fund — find
+ * the next real due-date occurrence on or after the latest leg.
+ *
+ * NEXT_CHECK legs fall WITHIN the same calendar month as the bill they
+ * fund — so the funded occurrence is simply that month's due date,
+ * regardless of whether the leg date is numerically before or after the
+ * due date itself.
+ */
+export function occurrenceFundedByGroup(
+  dueDate: number,
+  fundingModel: "BEFORE_DUE" | "NEXT_CHECK",
+  maxLegDate: Date
+): Date {
+  if (fundingModel === "NEXT_CHECK") {
+    return new Date(
+      Date.UTC(maxLegDate.getUTCFullYear(), maxLegDate.getUTCMonth(), dueDate)
+    );
+  }
+  return nextOccurrenceOnOrAfter(dueDate, maxLegDate);
 }
 
 export function getCurrentOccurrence(dueDate: number, referenceDate: Date = new Date()): Date {
@@ -655,19 +659,8 @@ export function findUnresolvedOccurrences(
   const unresolved: UnresolvedOccurrence[] = [];
 
   for (const bill of bills) {
-    // Split bills are deliberately excluded here — this function has no
-    // concept of "half a leg," so it would always report a split bill's
-    // FULL budgeted amount, which is wrong once even one leg is involved.
-    // Split bills already have their own correct, working mechanism (the
-    // per-leg checkboxes, with proper half-amounts), so routing them
-    // through this generic check would double-count and misreport them.
     if (bill.splittable) continue;
 
-    // The CURRENT cycle's occurrence — whether it's already passed or is
-    // still upcoming — is what matters here, regardless of how many pay
-    // cycles back that puts it. A bill's obligation doesn't disappear just
-    // because more than one payday has gone by since its due date. This
-    // deliberately has no arbitrary "how far back" cap.
     const dueDate = getCurrentOccurrence(bill.dueDate);
     if (isPaidOccurrence(bill.id, dueDate)) continue;
 

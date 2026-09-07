@@ -39,6 +39,7 @@ model User {
   bills         Bill[]
   suggestions   SplitSuggestion[]
   lastReviewedMonth String?
+  currentCycleStartedAt DateTime @default(now())
 }
 
 model IncomeSource {

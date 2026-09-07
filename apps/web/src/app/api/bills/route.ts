@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/session";
 import { createBillSplit } from "@/lib/split-bill";
-import { getCurrentOccurrence, nextOccurrenceOnOrAfter } from "@split-my-bills/shared";
+import { getCurrentOccurrence, occurrenceFundedByGroup } from "@split-my-bills/shared";
 
 export async function GET() {
   const userId = await getCurrentUserId();
@@ -57,8 +57,16 @@ export async function GET() {
     const startOfCurrentMonth = new Date(
       Date.UTC(currentOccurrence.getUTCFullYear(), currentOccurrence.getUTCMonth(), 1)
     );
+    // Never flag this for a bill with NO paid history at all — there's
+    // nothing meaningful to compare against yet (e.g. right after a fresh
+    // database wipe, or a genuinely brand-new bill that's simply never
+    // come due before).
+    const hasAnyPaidHistory = b.payments.some((p) => p.status === "PAID");
     const previousMonthUnpaid =
-      !b.splittable && !previousMonthPaid && b.createdAt < startOfCurrentMonth;
+      !b.splittable &&
+      !previousMonthPaid &&
+      b.createdAt < startOfCurrentMonth &&
+      hasAnyPaidHistory;
 
     const splitPayments = b.payments.filter(
       (p) => p.isSplitPayment && p.status === "SCHEDULED"
@@ -70,12 +78,12 @@ export async function GET() {
     let previousSplitGroupId: string | null = null;
 
     if (b.splittable) {
-      // Split legs are always dated BEFORE the due date they fund (that's
-      // the whole point — paying ahead from the two most recent checks),
-      // so comparing a leg's own date against the due date can never
-      // resolve "overdue." Instead: figure out which due-date occurrence
-      // each splitGroupId actually funds (same logic ensureRecurringSplits
-      // uses), and check whether the group funding THIS cycle is fully paid.
+      // Split legs are dated differently depending on fundingModel:
+      // BEFORE_DUE legs are always BEFORE the due date they fund;
+      // NEXT_CHECK legs fall WITHIN the same calendar month as the bill
+      // they fund. occurrenceFundedByGroup() knows the difference and
+      // MUST be the same function ensureRecurringSplits() uses, or the
+      // two systems will disagree about which cycle a group belongs to.
       const groups = new Map<string, typeof b.payments>();
       for (const p of b.payments) {
         if (!p.isSplitPayment || !p.splitGroupId) continue;
@@ -89,8 +97,8 @@ export async function GET() {
       // lets the Bills list show only "this month's" split group by
       // default, plus the immediately-prior one if it's still unresolved
       // — instead of every group ever generated, all at once.
-      const previousOccurrence = new Date(currentOccurrence);
-      previousOccurrence.setUTCMonth(previousOccurrence.getUTCMonth() - 1);
+      const previousOccurrenceForSplit = new Date(currentOccurrence);
+      previousOccurrenceForSplit.setUTCMonth(previousOccurrenceForSplit.getUTCMonth() - 1);
 
       let currentCycleFunded = false;
 
@@ -98,7 +106,7 @@ export async function GET() {
         const dated = legs.filter((l) => l.paidDate);
         if (dated.length === 0) continue;
         const maxLegDate = new Date(Math.max(...dated.map((l) => l.paidDate!.getTime())));
-        const fundedDueDate = nextOccurrenceOnOrAfter(b.dueDate, maxLegDate);
+        const fundedDueDate = occurrenceFundedByGroup(b.dueDate, b.fundingModel, maxLegDate);
 
         const isSameOccurrence = (a: Date, c: Date) =>
           a.getUTCFullYear() === c.getUTCFullYear() &&
@@ -110,7 +118,7 @@ export async function GET() {
           if (legs.every((l) => l.status === "PAID")) {
             currentCycleFunded = true;
           }
-        } else if (isSameOccurrence(fundedDueDate, previousOccurrence)) {
+        } else if (isSameOccurrence(fundedDueDate, previousOccurrenceForSplit)) {
           // Only surface the previous cycle's group if it's NOT fully
           // paid — a resolved past cycle doesn't need to keep showing.
           if (!legs.every((l) => l.status === "PAID")) {
