@@ -528,3 +528,60 @@ Added to the active backlog for a future dedicated pass.
    capability.
 
 **Last updated:** 2026-09-07
+
+---
+
+## Addendum — 2026-09-07, later same day (mobile-native redesign)
+
+**Real mobile-native restructure, prompted by the user's direct observation that the app felt
+like "a zoomed-out desktop site" on a real iPhone, not a native app** — and their explicit
+push to use real reference apps (EveryDollar, Rocket Money) as the design standard rather than
+incremental CSS tweaks.
+
+**Root technical cause of the "zoomed out desktop" look**: `apps/web/src/app/layout.tsx`'s
+`viewport` export only specified `themeColor`, omitting `width`/`initialScale` entirely.
+Providing a partial `Viewport` object does NOT get the rest auto-filled by Next.js — the page
+had no real `width=device-width` instruction at all, so mobile Safari assumed a virtual
+~980px desktop viewport and shrank the whole page to fit. Fixed by adding
+`width: "device-width", initialScale: 1`. **Verified directly via
+`curl -sL <url>/login | grep viewport`** — bypassing the phone entirely — confirming the fix
+was genuinely live and correctly formed, after several rounds of the phone still appearing
+unchanged (which traced back to real, separate issues: needing an actual `vercel --prod`
+deploy, and normal browser/testing confusion — not a code problem once verified this way).
+
+**Real mobile tap-target fixes, per Apple's Human Interface Guidelines (44×44pt minimum)**:
+enlarged and properly padded the bill-paid checkbox, the bill options 3-dot menu, the
+split-leg checkbox, and the split-leg edit-amount pencil — all of which were far below the
+comfortable minimum. **A real mistake caught and fixed along the way**: the first attempt used
+negative margins (`-m-2.5` etc.) to expand tap targets invisibly, which caused genuine
+horizontal overflow on a real phone (elements bleeding outside their row's bounds) — reverted
+to plain positive padding instead, which improves tap area without any layout risk.
+
+**The bigger structural change**: restructured the single long-scrolling dashboard into a real
+**4-tab bottom navigation** (Home / Bills / Income / Periods), matching how EveryDollar and
+Rocket Money are actually built — a fixed bottom nav bar (`bottom-nav.tsx`, new component,
+properly accounts for the iPhone home-indicator safe area) with each tab showing focused,
+distinct content instead of everything stacked on one page:
+- **Home**: full 3-column hero card, AI Coach, extra-paycheck alert cards
+- **Bills**: its own compact bills-specific hero, split suggestions, full bill list, Quick Spend
+- **Income**: income sources + add form
+- **Periods**: the pay-period list
+
+**Branded loading screen**: replaced plain "Loading..." text with the app's own pulsing `Logo`
+component, matching the login screen's visual identity.
+
+**A real, hard-won lesson from the Periods tab specifically**: an attempt to redesign Periods
+as a swipeable single-card carousel (built earlier today, see prior addendum) kept producing a
+large, awkward empty-space gap below the card on a real phone. Multiple centering attempts
+failed — including one genuine bug (a centering wrapper missing `flex-col`, which flipped the
+centering onto the wrong axis) and one file-corruption incident (a chunk of chat transcript
+text got accidentally pasted into the actual file, breaking the build with a syntax error,
+caught immediately by the build's own error output). **The user correctly identified the real
+root cause**: this wasn't a viewport/constraint bug at all — the swipeable carousel design
+inherently shows only one period at a time, meaning genuinely less content on screen than a
+full list, which is what created the empty space. **Resolved by reverting Periods to the
+original, simpler vertical list** (every period stacked, tap to expand) — sidestepping the
+whole problem by restoring more actual content to the screen, rather than continuing to fight
+the empty-space symptom with layout tricks.
+
+**Last updated:** 2026-09-07
