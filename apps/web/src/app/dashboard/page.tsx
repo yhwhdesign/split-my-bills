@@ -434,7 +434,7 @@ export default function DashboardPage() {
   );
 }
   return (
-    <main className="mx-auto max-w-4xl p-4 sm:p-8 space-y-6 sm:space-y-8 pb-24">
+    <main className="mx-auto max-w-4xl p-4 sm:p-8 space-y-6 sm:space-y-8 pb-24 flex flex-col min-h-screen">
       <div className="flex items-center justify-between border-b pb-4">
         <div>
           <Logo />
@@ -1037,7 +1037,8 @@ export default function DashboardPage() {
       )}
 
       {activeTab === "periods" && periods.length > 0 && (
-        <Card className="shadow-sm border-border/50 py-6">
+        <div className="flex-1 flex items-start justify-center pt-4">
+        <Card className="shadow-sm border-border/50 py-6 w-full">
           <CardHeader>
             <CardTitle>Upcoming Pay Periods</CardTitle>
             <CardDescription>Swipe to see each period — based on your pay schedule and bills</CardDescription>
@@ -1122,6 +1123,7 @@ export default function DashboardPage() {
             </div>
           </CardContent>
         </Card>
+        </div>
       )}
 
       {dueModalOpen && (
