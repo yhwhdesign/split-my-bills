@@ -1,4 +1,4 @@
-import { calculatePayPeriods, generateSplitSuggestions, generateOpportunitySuggestions, getCurrentOccurrence, findUnresolvedOccurrences, type Bill, type PaySchedule, type SplitPaymentOverride, type PaidOccurrence, type IncomeSourceInput } from "@split-my-bills/shared";
+import { calculatePayPeriods, generateSplitSuggestions, generateOpportunitySuggestions, generateBillFundingRecommendations, getCurrentOccurrence, findUnresolvedOccurrences, type Bill, type PaySchedule, type SplitPaymentOverride, type PaidOccurrence, type IncomeSourceInput } from "@split-my-bills/shared";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/session";
@@ -105,7 +105,31 @@ export async function GET() {
     : [];
 
   const suggestions = generateSplitSuggestions(periods);
-  const opportunities = generateOpportunitySuggestions(periods);
 
-  return NextResponse.json({ periods, suggestions, opportunities, needsReview });
+  // Cross-bill payday coordination: check every bill (except split bills
+  // due the 1st, whose "due date" is a formality) for whether it would go
+  // more than 10 days late without a genuine extra (3PD/5PD) paycheck
+  // stepping in. A real at-risk bill takes priority over treating that
+  // same extra paycheck as pure savings potential.
+  const billFundingRecommendations = generateBillFundingRecommendations(
+    incomeInputs,
+    sharedBills
+  );
+
+  const rescuedPayDateKeys = new Set(
+    billFundingRecommendations.map((r) => r.extraPayDate.toISOString())
+  );
+
+  const allOpportunities = generateOpportunitySuggestions(periods);
+  const opportunities = allOpportunities.filter(
+    (o) => !rescuedPayDateKeys.has(o.payDate.toISOString())
+  );
+
+  return NextResponse.json({
+    periods,
+    suggestions,
+    opportunities,
+    billFundingRecommendations,
+    needsReview,
+  });
 }
