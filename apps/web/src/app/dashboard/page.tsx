@@ -104,6 +104,7 @@ export default function DashboardPage() {
   const [payingLegId, setPayingLegId] = useState<string | null>(null);
   const [menuBillId, setMenuBillId] = useState<string | null>(null);
   const [expandedPeriod, setExpandedPeriod] = useState<number | null>(null);
+  const [periodCarouselIndex, setPeriodCarouselIndex] = useState(0);
   const [reviewingBillId, setReviewingBillId] = useState<string | null>(null);
   const [coaching, setCoaching] = useState<string | null>(null);
   const [coachingLoading, setCoachingLoading] = useState(false);
@@ -130,22 +131,28 @@ export default function DashboardPage() {
   }, [loading]);
 
   useEffect(() => {
-    if (loading) return;
-    const overdueBills = bills.filter(
-      (b) => b.isOverdue || b.previousMonthUnpaid || !!b.previousSplitGroupId
+  if (loading) return;
+  const now = new Date();
+  const monthKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+
+  // Only ever ask once per real calendar month — not on every reload.
+  if (userLastReviewedMonth === monthKey) return;
+
+  const overdueBills = bills.filter(
+    (b) => b.isOverdue || b.previousMonthUnpaid || !!b.previousSplitGroupId
+  );
+  if (overdueBills.length > 0) {
+    setMonthlyReviewBills(
+      overdueBills.map((b) => ({
+        id: b.id,
+        name: b.name,
+        amount: b.amount,
+        occurrenceDate: b.previousMonthUnpaid ? b.previousOccurrenceDate! : b.currentOccurrenceDate,
+      }))
     );
-    if (overdueBills.length > 0) {
-      setMonthlyReviewBills(
-  overdueBills.map((b) => ({
-    id: b.id,
-    name: b.name,
-    amount: b.amount,
-    occurrenceDate: b.previousMonthUnpaid ? b.previousOccurrenceDate! : b.currentOccurrenceDate,
-  }))
-);
-      setMonthlyReviewOpen(true);
-    }
-  }, [loading, bills]);
+    setMonthlyReviewOpen(true);
+  }
+}, [loading, bills, userLastReviewedMonth]);
 
   async function loadData() {
     const [incomeRes, billsRes, periodsRes, userRes] = await Promise.all([
@@ -346,19 +353,13 @@ export default function DashboardPage() {
   }
 }
 
-  function handleMonthlyReviewClose(allResolved: boolean) {
-    setMonthlyReviewOpen(false);
-    if (allResolved) {
-      const now = new Date();
-      const monthKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
-      setUserLastReviewedMonth(monthKey);
-      fetch("/api/user/me", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lastReviewedMonth: monthKey }),
-      }).catch((err) => console.error("Failed to save lastReviewedMonth:", err));
-    }
+  async function handleMonthlyReviewClose(allResolved: boolean) {
+  setMonthlyReviewOpen(false);
+  if (allResolved) {
+    await fetch("/api/reset-cycle", { method: "POST" });
+    loadData();
   }
+}
 
   const needsReviewBillIds = new Set(needsReview.map((n) => n.billId));
   const editingBill = bills.find((b) => b.id === editingBillId) ?? null;
@@ -402,13 +403,52 @@ export default function DashboardPage() {
     ? currentPeriod.income - currentPeriod.totalBillAmount
     : totalIncome - totalBills;
 
-  const dueBeforeNextPaydayCount = (currentPeriod?.bills.length ?? 0) + needsReview.length;
-  const dueBeforeNextPaydayAmount =
-    (currentPeriod?.totalBillAmount ?? 0) + needsReview.reduce((sum, n) => sum + n.amount, 0);
+  // Split bills with an unresolved previous cycle only have SOME of their
+// legs unpaid within that specific group — sum just those, not the whole
+// bill amount, since some legs in the group may already be paid.
+const unresolvedSplitCount = bills.filter((b) => b.previousSplitGroupId).length;
+const unresolvedSplitAmount = bills.reduce((sum, b) => {
+  if (!b.previousSplitGroupId) return sum;
+  const unpaidLegs = b.payments.filter(
+    (p) => p.splitGroupId === b.previousSplitGroupId && p.status !== "PAID"
+  );
+  return sum + unpaidLegs.reduce((s, p) => s + Number(p.amount), 0);
+}, 0);
 
-  const projectedRemainingThruNextMonth = periods
+// Non-split bills whose PREVIOUS month's occurrence was never paid — a
+// separate unresolved bucket from needsReview, covering the "due late in
+// the month" reconciliation gap.
+// Exclude any bill already counted via needsReview — a bill unpaid for
+// two or more months can satisfy both conditions independently, which
+// would double-count the same real debt if not guarded against here.
+const previousMonthUnpaidBills = bills.filter(
+  (b) => b.previousMonthUnpaid && !needsReviewBillIds.has(b.id)
+);
+const previousMonthUnpaidAmount = previousMonthUnpaidBills.reduce(
+  (sum, b) => sum + Number(b.amount),
+  0
+);
+
+// Everything currently unresolved, combined — used both for "Due before
+// next payday" and to correctly reduce "Projected Remaining," since
+// periods never include orphaned/unresolved obligations by design.
+const totalUnresolvedAmount =
+  needsReview.reduce((sum, n) => sum + n.amount, 0) +
+  unresolvedSplitAmount +
+  previousMonthUnpaidAmount;
+  
+const dueBeforeNextPaydayCount =
+  (currentPeriod?.bills.length ?? 0) +
+  needsReview.length +
+  unresolvedSplitCount +
+  previousMonthUnpaidBills.length;
+const dueBeforeNextPaydayAmount =
+  (currentPeriod?.totalBillAmount ?? 0) + totalUnresolvedAmount;
+
+  const projectedRemainingThruNextMonth =
+  periods
     .filter((p) => new Date(p.start) <= endOfYearUTC)
-    .reduce((sum, p) => sum + (p.income - p.totalBillAmount), 0);
+    .reduce((sum, p) => sum + (p.income - p.totalBillAmount), 0) - totalUnresolvedAmount;
 
   const actualSpentSoFar = currentPeriod
     ? bills.reduce((sum, b) => {
@@ -635,63 +675,94 @@ export default function DashboardPage() {
       </Card>
 
       {periods.length > 0 && (
-        <Card className="shadow-sm border-border/50 py-6">
-          <CardHeader>
-            <CardTitle>Upcoming Pay Periods</CardTitle>
-            <CardDescription>Based on your pay schedule and bills</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {periods.map((p, idx) => (
-              <div
-                key={idx}
-                className={`rounded-md border text-sm ${
-                  p.isCashflowRisk ? "border-destructive/50 bg-destructive/5" : "border-border"
-                }`}
+  <Card className="shadow-sm border-border/50 py-6">
+    <CardHeader>
+      <CardTitle>Upcoming Pay Periods</CardTitle>
+      <CardDescription>Swipe to see each period — based on your pay schedule and bills</CardDescription>
+    </CardHeader>
+    <CardContent>
+      <div
+        className="flex overflow-x-auto snap-x snap-mandatory gap-3 -mx-1 px-1 pb-2"
+        style={{ scrollbarWidth: "none" }}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          const idx = Math.round(el.scrollLeft / el.clientWidth);
+          if (idx !== expandedPeriod && idx >= 0 && idx < periods.length) {
+            setPeriodCarouselIndex(idx);
+          }
+        }}
+      >
+        {periods.map((p, idx) => (
+          <div
+            key={idx}
+            className="snap-center shrink-0 w-full"
+            style={{ scrollSnapAlign: "center" }}
+          >
+            <div
+              className={`rounded-md border text-sm h-full ${
+                p.isCashflowRisk ? "border-destructive/50 bg-destructive/5" : "border-border"
+              }`}
+            >
+              <button
+                onClick={() => setExpandedPeriod(expandedPeriod === idx ? null : idx)}
+                className="flex w-full items-center justify-between gap-2 p-3 text-left flex-wrap"
               >
-                <button
-                  onClick={() => setExpandedPeriod(expandedPeriod === idx ? null : idx)}
-                  className="flex w-full items-center justify-between gap-2 p-3 text-left flex-wrap"
-                >
-                  <div>
-                    <div className="font-medium">
-                      {new Date(p.payDate).toLocaleDateString(undefined, { timeZone: "UTC"})}
-                      {p.bonusPaycheckLabels?.map((label: string) => (
-                        <span key={label} className="ml-2 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-0.5 tracking-wide align-middle">
-                          {label}
-                        </span>
-                      ))}
-                    </div>
-                    <div className="text-muted-foreground text-xs">
-                      {p.bills.length} bill{p.bills.length !== 1 ? "s" : ""} — $
-                      {p.totalBillAmount.toFixed(2)} due
-                    </div>
-                  </div>
-                  {p.isCashflowRisk ? (
-                    <span className="rounded-full bg-destructive/10 text-destructive text-xs font-semibold px-2.5 py-1">
-                      Short ${p.shortfall.toFixed(2)}
-                    </span>
-                  ) : (
-                    <span className="rounded-full bg-primary/10 text-primary text-xs font-semibold px-2.5 py-1">
-                      On track
-                    </span>
-                  )}
-                </button>
-
-                {expandedPeriod === idx && p.bills.length > 0 && (
-                  <div className="border-t px-3 py-2 space-y-1">
-                    {p.bills.map((item: any, i: number) => (
-                      <div key={i} className="flex justify-between text-xs text-muted-foreground">
-                        <span className="font-medium">{item.bill.name}</span>
-                        <span className="font-semibold">${item.bill.amount.toFixed(2)}</span>
-                      </div>
+                <div>
+                  <div className="font-medium">
+                    {new Date(p.payDate).toLocaleDateString(undefined, { timeZone: "UTC" })}
+                    {p.bonusPaycheckLabels?.map((label: string) => (
+                      <span
+                        key={label}
+                        className="ml-2 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-0.5 tracking-wide align-middle"
+                      >
+                        {label}
+                      </span>
                     ))}
                   </div>
+                  <div className="text-muted-foreground text-xs">
+                    {p.bills.length} bill{p.bills.length !== 1 ? "s" : ""} — $
+                    {p.totalBillAmount.toFixed(2)} due
+                  </div>
+                </div>
+                {p.isCashflowRisk ? (
+                  <span className="rounded-full bg-destructive/10 text-destructive text-xs font-semibold px-2.5 py-1">
+                    Short ${p.shortfall.toFixed(2)}
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-primary/10 text-primary text-xs font-semibold px-2.5 py-1">
+                    On track
+                  </span>
                 )}
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
+              </button>
+
+              {expandedPeriod === idx && p.bills.length > 0 && (
+                <div className="border-t px-3 py-2 space-y-1 max-h-64 overflow-y-auto">
+                  {p.bills.map((item: any, i: number) => (
+                    <div key={i} className="flex justify-between text-xs text-muted-foreground">
+                      <span className="font-medium">{item.bill.name}</span>
+                      <span className="font-semibold">${item.bill.amount.toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex justify-center gap-1.5 mt-3">
+        {periods.map((_, idx) => (
+          <span
+            key={idx}
+            className={`h-1.5 w-1.5 rounded-full transition-colors ${
+              idx === periodCarouselIndex ? "bg-primary" : "bg-muted"
+            }`}
+          />
+        ))}
+      </div>
+    </CardContent>
+  </Card>
+)}
 
       {suggestions.length > 0 && (
         <Card className="border-primary/30 bg-primary/5 shadow-sm py-6">

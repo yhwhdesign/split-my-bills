@@ -4,7 +4,6 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/session";
 import { ensureRecurringSplits } from "@/lib/split-bill";
 
-
 export async function GET() {
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -34,6 +33,7 @@ export async function GET() {
           id: bill.id,
           dueDate: bill.dueDate,
           amount: Number(bill.amount),
+          fundingModel: bill.fundingModel,
         },
         incomeInputs
       );
@@ -73,7 +73,6 @@ export async function GET() {
       isSplitPayment: false,
     },
   });
-
   const paidOccurrences: PaidOccurrence[] = paidPayments
     .filter((p) => p.paidDate !== null)
     .map((p) => ({ billId: p.billId, date: p.paidDate! }));

@@ -2,7 +2,8 @@ import { prisma } from "@/lib/prisma";
 import {
   planBillSplit,
   pickSplitDates,
-  nextOccurrenceOnOrAfter,
+  pickSplitDatesForCurrentMonth,
+  occurrenceFundedByGroup,
   getCurrentOccurrence,
   type PaySchedule,
   type Bill,
@@ -72,7 +73,12 @@ export async function createBillSplit(billId: string, userId: string) {
 }
 
 export async function ensureRecurringSplits(
-  bill: { id: string; dueDate: number; amount: number },
+  bill: {
+    id: string;
+    dueDate: number;
+    amount: number;
+    fundingModel: "BEFORE_DUE" | "NEXT_CHECK";
+  },
   incomeSources: IncomeSourceInput[],
   windowDays: number = 60
 ) {
@@ -91,7 +97,11 @@ export async function ensureRecurringSplits(
   let lastFundedDueDate: Date | null = null;
   for (const dates of groups.values()) {
     const maxLegDate = new Date(Math.max(...dates.map((d) => d.getTime())));
-    const fundedDueDate = nextOccurrenceOnOrAfter(bill.dueDate, maxLegDate);
+    // MUST use the same fundingModel-aware attribution logic used
+    // everywhere else a group's dates need interpreting (isOverdue in
+    // GET /api/bills), or the two systems will disagree about which
+    // cycle a group belongs to.
+    const fundedDueDate = occurrenceFundedByGroup(bill.dueDate, bill.fundingModel, maxLegDate);
     if (!lastFundedDueDate || fundedDueDate > lastFundedDueDate) {
       lastFundedDueDate = fundedDueDate;
     }
@@ -113,55 +123,59 @@ export async function ensureRecurringSplits(
   const created: { splitGroupId: string }[] = [];
 
   while (nextTarget <= windowEnd) {
-    const [firstDate, secondDate] = pickSplitDates(nextTarget, incomeSources);
-
-    // Guard against a concurrent request having already created this exact
-    // cycle's split — the dashboard fires GET /api/bills and
-    // GET /api/split-suggestions at the same time, and two overlapping
-    // calls to this function can each independently see "nothing exists
-    // yet" and each create a full duplicate set. Checking for an existing
-    // leg at this exact target date closes that window in practice.
-    const alreadyExists = await prisma.payment.findFirst({
-      where: {
-        billId: bill.id,
-        isSplitPayment: true,
-        paidDate: firstDate,
-      },
-    });
-    if (alreadyExists) {
-      nextTarget.setUTCMonth(nextTarget.getUTCMonth() + 1);
-      continue;
-    }
+    // NEXT_CHECK bills are funded by whatever real paydays land WITHIN
+    // that same calendar month — not by paydays before the numeric due
+    // date, which is what BEFORE_DUE bills use.
+    const [firstDate, secondDate] =
+      bill.fundingModel === "NEXT_CHECK"
+        ? pickSplitDatesForCurrentMonth(nextTarget, incomeSources)
+        : pickSplitDates(nextTarget, incomeSources);
 
     const splitGroupId = crypto.randomUUID();
     const half = bill.amount / 2;
 
-    await prisma.$transaction([
-      prisma.payment.create({
-        data: {
-          billId: bill.id,
-          amount: half,
-          status: "SCHEDULED",
-          isSplitPayment: true,
-          splitGroupId,
-          paidDate: firstDate,
-          isLate: firstDate > nextTarget,
-        },
-      }),
-      prisma.payment.create({
-        data: {
-          billId: bill.id,
-          amount: half,
-          status: "SCHEDULED",
-          isSplitPayment: true,
-          splitGroupId,
-          paidDate: secondDate,
-          isLate: secondDate > nextTarget,
-        },
-      }),
-    ]);
+    // A unique DB constraint (billId, paidDate, isSplitPayment) is the
+    // real safeguard against duplicates — the dashboard fires multiple
+    // requests at once, and Next.js dev mode can genuinely double-invoke
+    // requests, so an application-level "check first" pattern is racy and
+    // was proven NOT sufficient. Instead: just attempt the create, and if
+    // the database rejects it as a duplicate (P2002), that means a
+    // concurrent request already created this exact cycle — treat that as
+    // success and move on, rather than as an error.
+    try {
+      await prisma.$transaction([
+        prisma.payment.create({
+          data: {
+            billId: bill.id,
+            amount: half,
+            status: "SCHEDULED",
+            isSplitPayment: true,
+            splitGroupId,
+            paidDate: firstDate,
+            isLate: firstDate > nextTarget,
+          },
+        }),
+        prisma.payment.create({
+          data: {
+            billId: bill.id,
+            amount: half,
+            status: "SCHEDULED",
+            isSplitPayment: true,
+            splitGroupId,
+            paidDate: secondDate,
+            isLate: secondDate > nextTarget,
+          },
+        }),
+      ]);
+      created.push({ splitGroupId });
+    } catch (err: any) {
+      if (err?.code !== "P2002") {
+        throw err;
+      }
+      // P2002 = unique constraint violation = a concurrent request already
+      // created this cycle. Not an error — just move on to the next month.
+    }
 
-    created.push({ splitGroupId });
     nextTarget.setUTCMonth(nextTarget.getUTCMonth() + 1);
   }
 
@@ -204,18 +218,16 @@ export async function regenerateSplitsIfNeeded(
   // createBillSplit() always blindly targets "today's calendar month" with
   // zero awareness of what's already been funded — fine for a genuinely
   // brand-new bill, but WRONG for a repair on a bill that already has real
-  // paid history beyond the current month (which is normal for any split
-  // bill, by design — they're always funded two paydays ahead). Calling
-  // ensureRecurringSplits() here means the repair path correctly looks at
-  // whatever PAID history survived the deletion above and advances PAST
-  // it, exactly like the automatic recurring-split logic already does
-  // correctly every day — instead of duplicating an already-funded cycle.
+  // paid history beyond the current month. Calling ensureRecurringSplits()
+  // here means the repair path correctly looks at whatever PAID history
+  // survived the deletion above and advances PAST it.
   try {
     await ensureRecurringSplits(
       {
         id: bill.id,
         dueDate: bill.dueDate,
         amount: Number(bill.amount),
+        fundingModel: bill.fundingModel,
       },
       incomeInputs
     );
