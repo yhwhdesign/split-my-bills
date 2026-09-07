@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { X, CheckCircle2, Circle } from "lucide-react";
 
-type ReviewBill = { id: string; name: string; amount: string };
+type ReviewBill = { id: string; name: string; amount: string; occurrenceDate: string };
 
 export function MonthlyReviewModal({
   bills,
@@ -12,7 +12,7 @@ export function MonthlyReviewModal({
   onClose,
 }: {
   bills: ReviewBill[];
-  onResolve: (billId: string, wasPaid: boolean) => void;
+  onResolve: (billId: string, wasPaid: boolean, occurrenceDate: string) => void;
   onClose: (allResolved: boolean) => void;
 }) {
   const [index, setIndex] = useState(0);
@@ -20,15 +20,12 @@ export function MonthlyReviewModal({
   const current = bills[index];
 
   function handleAnswer(wasPaid: boolean) {
-    onResolve(current.id, wasPaid);
+    onResolve(current.id, wasPaid, current.occurrenceDate);
     const stillAllPaid = allPaidSoFar && wasPaid;
     setAllPaidSoFar(stillAllPaid);
     if (index + 1 < bills.length) {
       setIndex(index + 1);
     } else {
-      // Only mark the month "reviewed" if EVERY bill was answered "Paid" —
-      // any "Not yet" means this should show again next time the app
-      // opens, not be silently considered done.
       onClose(stillAllPaid);
     }
   }

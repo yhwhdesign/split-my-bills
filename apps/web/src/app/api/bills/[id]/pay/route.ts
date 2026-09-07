@@ -17,20 +17,28 @@ export async function POST(
   }
 
   // Optional actual-amount override — lets a user record what they really
-  // paid when it differs from the budgeted bill.amount. Falls back to the
-  // budgeted amount if no override is sent, or if it's not a valid
-  // positive number (defend against a malformed/empty body).
+  // paid when it differs from the budgeted bill.amount. Optional
+  // occurrenceDate override — lets a caller mark a SPECIFIC past
+  // occurrence paid (e.g. resolving a previous month's unpaid bill from
+  // the monthly review flow), instead of always defaulting to today's
+  // current cycle. Falls back to today's occurrence, and the budgeted
+  // amount, if neither is sent.
   let actualAmount = Number(bill.amount);
+  let occurrenceDueDate = getCurrentOccurrence(bill.dueDate);
   try {
     const body = await request.json();
     if (body && typeof body.amount === "number" && body.amount > 0) {
       actualAmount = body.amount;
     }
+    if (body && typeof body.occurrenceDate === "string") {
+      const parsed = new Date(body.occurrenceDate);
+      if (!isNaN(parsed.getTime())) {
+        occurrenceDueDate = parsed;
+      }
+    }
   } catch {
-    // No body sent at all — fine, just use the budgeted amount.
+    // No body sent at all — fine, use today's occurrence and the budgeted amount.
   }
-
-  const occurrenceDueDate = getCurrentOccurrence(bill.dueDate);
 
   // If this occurrence is already marked paid, remove that row first — this
   // request either confirms the same payment again or updates the amount.
