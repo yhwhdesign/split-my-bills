@@ -682,7 +682,7 @@ const dueBeforeNextPaydayAmount =
     </CardHeader>
     <CardContent>
       <div
-        className="flex overflow-x-auto snap-x snap-mandatory gap-3 -mx-1 px-1 pb-2"
+        className="flex overflow-x-auto snap-x snap-mandatory gap-3 pb-2"
         style={{ scrollbarWidth: "none" }}
         onScroll={(e) => {
           const el = e.currentTarget;
@@ -695,8 +695,8 @@ const dueBeforeNextPaydayAmount =
         {periods.map((p, idx) => (
           <div
             key={idx}
-            className="snap-center shrink-0 w-full"
-            style={{ scrollSnapAlign: "center" }}
+            className="snap-center shrink-0 basis-full"
+style={{ scrollSnapAlign: "center", flex: "0 0 100%" }}
           >
             <div
               className={`rounded-md border text-sm h-full ${
