@@ -79,6 +79,8 @@ type Bill = {
   payments: SplitPaymentLeg[];
   isOverdue: boolean;
   previousMonthUnpaid: boolean;
+  previousOccurrenceDate: string | null;
+  currentOccurrenceDate: string;
 };
 
 type NeedsReviewItem = {
@@ -114,8 +116,8 @@ export default function DashboardPage() {
   const [dueModalOpen, setDueModalOpen] = useState(false);
   const [monthlyReviewOpen, setMonthlyReviewOpen] = useState(false);
   const [monthlyReviewBills, setMonthlyReviewBills] = useState<
-    { id: string; name: string; amount: string }[]
-  >([]);
+  { id: string; name: string; amount: string; occurrenceDate: string }[]
+>([]);
 
   useEffect(() => {
     loadData();
@@ -128,17 +130,22 @@ export default function DashboardPage() {
   }, [loading]);
 
   useEffect(() => {
-  if (loading) return;
-  const overdueBills = bills.filter(
-    (b) => b.isOverdue || b.previousMonthUnpaid || !!b.previousSplitGroupId
-  );
-  if (overdueBills.length > 0) {
-    setMonthlyReviewBills(
-      overdueBills.map((b) => ({ id: b.id, name: b.name, amount: b.amount }))
+    if (loading) return;
+    const overdueBills = bills.filter(
+      (b) => b.isOverdue || b.previousMonthUnpaid || !!b.previousSplitGroupId
     );
-    setMonthlyReviewOpen(true);
-  }
-}, [loading, bills]);
+    if (overdueBills.length > 0) {
+      setMonthlyReviewBills(
+  overdueBills.map((b) => ({
+    id: b.id,
+    name: b.name,
+    amount: b.amount,
+    occurrenceDate: b.previousMonthUnpaid ? b.previousOccurrenceDate! : b.currentOccurrenceDate,
+  }))
+);
+      setMonthlyReviewOpen(true);
+    }
+  }, [loading, bills]);
 
   async function loadData() {
     const [incomeRes, billsRes, periodsRes, userRes] = await Promise.all([
@@ -328,25 +335,30 @@ export default function DashboardPage() {
     setReviewingBillId(null);
   }
 
-  function handleMonthlyReviewResolve(billId: string, wasPaid: boolean) {
+  async function handleMonthlyReviewResolve(billId: string, wasPaid: boolean, occurrenceDate: string) {
   if (wasPaid) {
-    handleTogglePaid(billId, false);
+    await fetch(`/api/bills/${billId}/pay`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ occurrenceDate }),
+    });
+    loadData();
   }
 }
 
-async function handleMonthlyReviewClose(allResolved: boolean) {
-  if (allResolved) {
-    const now = new Date();
-    const monthKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
-    await fetch("/api/user/me", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lastReviewedMonth: monthKey }),
-    });
-    setUserLastReviewedMonth(monthKey);
+  function handleMonthlyReviewClose(allResolved: boolean) {
+    setMonthlyReviewOpen(false);
+    if (allResolved) {
+      const now = new Date();
+      const monthKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+      setUserLastReviewedMonth(monthKey);
+      fetch("/api/user/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lastReviewedMonth: monthKey }),
+      }).catch((err) => console.error("Failed to save lastReviewedMonth:", err));
+    }
   }
-  setMonthlyReviewOpen(false);
-}
 
   const needsReviewBillIds = new Set(needsReview.map((n) => n.billId));
   const editingBill = bills.find((b) => b.id === editingBillId) ?? null;
@@ -355,8 +367,8 @@ async function handleMonthlyReviewClose(allResolved: boolean) {
   const payingLeg =
     bills.flatMap((b) => b.payments).find((p) => p.id === payingLegId) ?? null;
   const billsNeedingAttention = bills.filter(
-  (b) => b.isOverdue || b.previousMonthUnpaid || !!b.previousSplitGroupId
-).length;
+    (b) => b.isOverdue || b.previousMonthUnpaid || !!b.previousSplitGroupId
+  ).length;
 
   const totalBillsThisMonth = bills
     .filter((b) => b.isRecurring)
@@ -378,19 +390,8 @@ async function handleMonthlyReviewClose(allResolved: boolean) {
     const dates = getPayDatesInRange(
       i.frequency as PaySchedule,
       new Date(i.nextPayDate),
-      todayUTC,
-      endOfYearUTC
-    );
-    return sum + dates.length * Number(i.amount);
-  }, 0);
-
-  const endOfMonthUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0));
-  const incomeThisMonth = income.reduce((sum, i) => {
-    const dates = getPayDatesInRange(
-      i.frequency as PaySchedule,
-      new Date(i.nextPayDate),
       startOfMonthUTC,
-      endOfMonthUTC
+      endOfYearUTC
     );
     return sum + dates.length * Number(i.amount);
   }, 0);
@@ -405,11 +406,8 @@ async function handleMonthlyReviewClose(allResolved: boolean) {
   const dueBeforeNextPaydayAmount =
     (currentPeriod?.totalBillAmount ?? 0) + needsReview.reduce((sum, n) => sum + n.amount, 0);
 
-  const endOfNextMonthUTC = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 2, 0)
-  );
   const projectedRemainingThruNextMonth = periods
-    .filter((p) => new Date(p.start) <= endOfNextMonthUTC)
+    .filter((p) => new Date(p.start) <= endOfYearUTC)
     .reduce((sum, p) => sum + (p.income - p.totalBillAmount), 0);
 
   const actualSpentSoFar = currentPeriod
@@ -524,10 +522,12 @@ async function handleMonthlyReviewClose(allResolved: boolean) {
       <div className="rounded-2xl bg-zinc-900 p-6 sm:p-8 shadow-lg">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-4">
           <div>
-            <p className="text-xs uppercase tracking-wide text-zinc-400">Projected Income (thru Dec 31)</p>
+            <p className="text-xs uppercase tracking-wide text-zinc-400">
+  Projected Income (thru {endOfYearUTC.toLocaleDateString(undefined, { timeZone: "UTC" })})
+</p>
             <p className="text-3xl font-bold text-white mt-1">${projectedIncomeToYearEnd.toFixed(2)}</p>
             <p className="text-xs text-zinc-500 mt-2">
-              This month: <span className="text-zinc-300">${incomeThisMonth.toFixed(2)}</span>
+              Current paycheck: <span className="text-zinc-300">${(currentPeriod?.income ?? 0).toFixed(2)}</span>
             </p>
           </div>
           <div className="sm:border-l sm:border-zinc-700 sm:pl-4">
@@ -556,7 +556,7 @@ async function handleMonthlyReviewClose(allResolved: boolean) {
           </div>
           <div className="sm:border-l sm:border-zinc-700 sm:pl-4">
             <p className="text-xs uppercase tracking-wide text-zinc-400">
-              Projected Remaining (thru {endOfNextMonthUTC.toLocaleDateString(undefined, { timeZone: "UTC" })})
+              Projected Remaining (thru {endOfYearUTC.toLocaleDateString(undefined, { timeZone: "UTC" })})
             </p>
             {(() => {
               const periodTotal = currentPeriod ? currentPeriod.income : totalIncome;
@@ -845,8 +845,8 @@ async function handleMonthlyReviewClose(allResolved: boolean) {
                       <div className="flex flex-col min-w-0">
                         <span
                           className={`font-medium flex items-center gap-1.5 ${
-  b.paidThisMonth ? "text-muted-foreground line-through" : ""
-} ${(b.isOverdue || b.previousMonthUnpaid || !!b.previousSplitGroupId) ? "text-red-600 font-bold" : ""}`}
+                            b.paidThisMonth ? "text-muted-foreground line-through" : ""
+                          } ${(b.isOverdue || b.previousMonthUnpaid || !!b.previousSplitGroupId) ? "text-red-600 font-bold" : ""}`}
                         >
                           {b.name}
                           {b.hasActiveSplit && (
@@ -854,8 +854,8 @@ async function handleMonthlyReviewClose(allResolved: boolean) {
                           )}
                           {b.hasLateSplit && <AlertTriangle size={13} className="text-yellow-600" />}
                           {(b.isOverdue || b.previousMonthUnpaid || !!b.previousSplitGroupId) && (
-  <AlertTriangle size={13} className="text-red-500" />
-)}
+                            <AlertTriangle size={13} className="text-red-500" />
+                          )}
                           {needsBillReview && (
                             <button
                               onClick={() =>
@@ -1112,8 +1112,8 @@ async function handleMonthlyReviewClose(allResolved: boolean) {
             </div>
             <div className="space-y-2">
               {bills
-  .filter((b) => b.isOverdue || b.previousMonthUnpaid || !!b.previousSplitGroupId)
-  .map((b) => (
+                .filter((b) => b.isOverdue || b.previousMonthUnpaid || !!b.previousSplitGroupId)
+                .map((b) => (
                   <div
                     key={b.id}
                     className="flex items-center justify-between text-sm border-b pb-2"
@@ -1179,14 +1179,44 @@ async function handleMonthlyReviewClose(allResolved: boolean) {
       )}
 
       {monthlyReviewOpen && (
-  <MonthlyReviewModal
-    bills={monthlyReviewBills}
-    onResolve={handleMonthlyReviewResolve}
-    onClose={handleMonthlyReviewClose}
-  />
-)}
-
+        <MonthlyReviewModal
+          bills={monthlyReviewBills}
+          onResolve={handleMonthlyReviewResolve}
+          onClose={handleMonthlyReviewClose}
+        />
+      )}
     </main>
+  );
+}
+
+function EditAmountForm({
+  initialValue,
+  onSave,
+  onCancel,
+}: {
+  initialValue: string;
+  onSave: (value: string) => void;
+  onCancel: () => void;
+}) {
+  const [value, setValue] = useState(initialValue);
+
+  return (
+    <div className="flex items-center gap-1">
+      <Input
+        type="number"
+        step="0.01"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        className="h-7 w-24 text-sm"
+        autoFocus
+      />
+      <button onClick={() => onSave(value)} className="text-primary hover:opacity-80">
+        <Check size={16} />
+      </button>
+      <button onClick={onCancel} className="text-muted-foreground/50 hover:text-foreground">
+        <X size={16} />
+      </button>
+    </div>
   );
 }
 

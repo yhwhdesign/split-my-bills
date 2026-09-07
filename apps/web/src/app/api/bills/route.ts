@@ -134,6 +134,8 @@ export async function GET() {
       currentSplitGroupId,
       previousSplitGroupId,
       previousMonthUnpaid,
+      previousOccurrenceDate: previousMonthUnpaid ? previousOccurrence.toISOString() : null,
+      currentOccurrenceDate: currentOccurrence.toISOString(),
     };
   });
 
