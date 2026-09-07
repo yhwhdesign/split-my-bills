@@ -1,5 +1,4 @@
 "use client";
-
 import { DayOfMonthPicker } from "@/components/day-of-month-picker";
 import { EditBillModal } from "@/components/edit-bill-modal";
 import { EditIncomeModal } from "@/components/edit-income-modal";
@@ -42,7 +41,6 @@ import { Logo } from "@/components/logo";
 import { InstallPrompt } from "@/components/install-prompt";
 import { suggestCategory } from "@/lib/categorize-bill";
 import { MonthlyReviewModal } from "@/components/monthly-review-modal";
-
 type IncomeSource = {
   id: string;
   name: string;
@@ -50,7 +48,6 @@ type IncomeSource = {
   frequency: string;
   nextPayDate: string;
 };
-
 type SplitPaymentLeg = {
   id: string;
   amount: string;
@@ -60,7 +57,6 @@ type SplitPaymentLeg = {
   isSplitPayment: boolean;
   splitGroupId: string | null;
 };
-
 type Bill = {
   id: string;
   name: string;
@@ -82,14 +78,12 @@ type Bill = {
   previousOccurrenceDate: string | null;
   currentOccurrenceDate: string;
 };
-
 type NeedsReviewItem = {
   billId: string;
   billName: string;
   amount: number;
   dueDate: string;
 };
-
 export default function DashboardPage() {
   const router = useRouter();
   const [income, setIncome] = useState<IncomeSource[]>([]);
@@ -120,25 +114,20 @@ export default function DashboardPage() {
   const [monthlyReviewBills, setMonthlyReviewBills] = useState<
   { id: string; name: string; amount: string; occurrenceDate: string }[]
 >([]);
-
   useEffect(() => {
     loadData();
   }, []);
-
   useEffect(() => {
     if (!loading) {
       loadCoaching();
     }
   }, [loading]);
-
   useEffect(() => {
   if (loading) return;
   const now = new Date();
   const monthKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
-
   // Only ever ask once per real calendar month — not on every reload.
   if (userLastReviewedMonth === monthKey) return;
-
   const overdueBills = bills.filter(
     (b) => b.isOverdue || b.previousMonthUnpaid || !!b.previousSplitGroupId
   );
@@ -154,7 +143,6 @@ export default function DashboardPage() {
     setMonthlyReviewOpen(true);
   }
 }, [loading, bills, userLastReviewedMonth]);
-
   async function loadData() {
     const [incomeRes, billsRes, periodsRes, userRes] = await Promise.all([
       fetch("/api/income"),
@@ -175,7 +163,6 @@ export default function DashboardPage() {
     setUserLastReviewedMonth(userData.lastReviewedMonth ?? null);
     setLoading(false);
   }
-
   async function loadCoaching() {
     setCoachingLoading(true);
     const res = await fetch("/api/ai-coaching");
@@ -184,13 +171,11 @@ export default function DashboardPage() {
     setLimitReached(!!data.limitReached);
     setCoachingLoading(false);
   }
-
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login");
     router.refresh();
   }
-
   async function handleAddIncome(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = e.currentTarget;
@@ -208,7 +193,6 @@ export default function DashboardPage() {
     form.reset();
     loadData();
   }
-
   async function handleQuickSpend(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = e.currentTarget;
@@ -232,7 +216,6 @@ export default function DashboardPage() {
     form.reset();
     loadData();
   }
-
   async function handleAddBill(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = e.currentTarget;
@@ -252,18 +235,15 @@ export default function DashboardPage() {
     form.reset();
     loadData();
   }
-
   async function handleDeleteIncome(id: string) {
     await fetch(`/api/income/${id}`, { method: "DELETE" });
     loadData();
   }
-
   async function handleDeleteBill(id: string) {
     await fetch(`/api/bills/${id}`, { method: "DELETE" });
     setMenuBillId(null);
     loadData();
   }
-
   async function handleUpdateIncome(
     id: string,
     updates: { name: string; amount: number; frequency: string; nextPayDate: string }
@@ -276,7 +256,6 @@ export default function DashboardPage() {
     setEditingIncomeId(null);
     loadData();
   }
-
   async function handleUpdateBill(
     id: string,
     updates: {
@@ -296,14 +275,12 @@ export default function DashboardPage() {
     setEditingBillId(null);
     loadData();
   }
-
   async function handleTogglePaid(billId: string, currentlyPaid: boolean) {
     await fetch(`/api/bills/${billId}/pay`, {
       method: currentlyPaid ? "DELETE" : "POST",
     });
     loadData();
   }
-
   async function handleMarkPaidAmount(billId: string, amount: number) {
     await fetch(`/api/bills/${billId}/pay`, {
       method: "POST",
@@ -313,14 +290,12 @@ export default function DashboardPage() {
     setMenuBillId(null);
     loadData();
   }
-
   async function handleToggleSplitPaymentPaid(paymentId: string, currentlyPaid: boolean) {
     await fetch(`/api/payments/${paymentId}/pay`, {
       method: currentlyPaid ? "DELETE" : "POST",
     });
     loadData();
   }
-
   async function handleMarkSplitLegPaidAmount(paymentId: string, amount: number) {
     await fetch(`/api/payments/${paymentId}/pay`, {
       method: "POST",
@@ -330,12 +305,10 @@ export default function DashboardPage() {
     setPayingLegId(null);
     loadData();
   }
-
   async function handleSplitBill(billId: string) {
     await fetch(`/api/bills/${billId}/split`, { method: "POST" });
     loadData();
   }
-
   async function handleResolveNeedsReview(billId: string, wasPaid: boolean) {
     if (wasPaid) {
       await fetch(`/api/bills/${billId}/pay`, { method: "POST" });
@@ -343,7 +316,6 @@ export default function DashboardPage() {
     }
     setReviewingBillId(null);
   }
-
   async function handleMonthlyReviewResolve(billId: string, wasPaid: boolean, occurrenceDate: string) {
   if (wasPaid) {
     await fetch(`/api/bills/${billId}/pay`, {
@@ -354,7 +326,6 @@ export default function DashboardPage() {
     loadData();
   }
 }
-
   async function handleMonthlyReviewClose(allResolved: boolean) {
   setMonthlyReviewOpen(false);
   if (allResolved) {
@@ -362,7 +333,6 @@ export default function DashboardPage() {
     loadData();
   }
 }
-
   const needsReviewBillIds = new Set(needsReview.map((n) => n.billId));
   const editingBill = bills.find((b) => b.id === editingBillId) ?? null;
   const editingIncome = income.find((i) => i.id === editingIncomeId) ?? null;
@@ -372,23 +342,18 @@ export default function DashboardPage() {
   const billsNeedingAttention = bills.filter(
     (b) => b.isOverdue || b.previousMonthUnpaid || !!b.previousSplitGroupId
   ).length;
-
   const totalBillsThisMonth = bills
     .filter((b) => b.isRecurring)
     .reduce((sum, b) => sum + Number(b.amount), 0);
-
   const totalIncome = income.reduce(
     (sum, i) => sum + normalizeToMonthly(Number(i.amount), i.frequency as PaySchedule),
     0
   );
-
   const rawIncomeTotal = income.reduce((sum, i) => sum + Number(i.amount), 0);
-
   const now = new Date();
   const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const endOfYearUTC = new Date(Date.UTC(now.getUTCFullYear(), 11, 31));
   const startOfMonthUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-
   const projectedIncomeToYearEnd = income.reduce((sum, i) => {
     const dates = getPayDatesInRange(
       i.frequency as PaySchedule,
@@ -398,60 +363,42 @@ export default function DashboardPage() {
     );
     return sum + dates.length * Number(i.amount);
   }, 0);
-
   const totalBills = bills.reduce((sum, b) => sum + Number(b.amount), 0);
   const currentPeriod = periods.length > 0 ? periods[0] : null;
   const periodRemaining = currentPeriod
     ? currentPeriod.income - currentPeriod.totalBillAmount
     : totalIncome - totalBills;
-
-  // Split bills with an unresolved previous cycle only have SOME of their
-// legs unpaid within that specific group — sum just those, not the whole
-// bill amount, since some legs in the group may already be paid.
-const unresolvedSplitCount = bills.filter((b) => b.previousSplitGroupId).length;
-const unresolvedSplitAmount = bills.reduce((sum, b) => {
-  if (!b.previousSplitGroupId) return sum;
-  const unpaidLegs = b.payments.filter(
-    (p) => p.splitGroupId === b.previousSplitGroupId && p.status !== "PAID"
+  const unresolvedSplitCount = bills.filter((b) => b.previousSplitGroupId).length;
+  const unresolvedSplitAmount = bills.reduce((sum, b) => {
+    if (!b.previousSplitGroupId) return sum;
+    const unpaidLegs = b.payments.filter(
+      (p) => p.splitGroupId === b.previousSplitGroupId && p.status !== "PAID"
+    );
+    return sum + unpaidLegs.reduce((s, p) => s + Number(p.amount), 0);
+  }, 0);
+  const previousMonthUnpaidBills = bills.filter(
+    (b) => b.previousMonthUnpaid && !needsReviewBillIds.has(b.id)
   );
-  return sum + unpaidLegs.reduce((s, p) => s + Number(p.amount), 0);
-}, 0);
+  const previousMonthUnpaidAmount = previousMonthUnpaidBills.reduce(
+    (sum, b) => sum + Number(b.amount),
+    0
+  );
+  const totalUnresolvedAmount =
+    needsReview.reduce((sum, n) => sum + n.amount, 0) +
+    unresolvedSplitAmount +
+    previousMonthUnpaidAmount;
 
-// Non-split bills whose PREVIOUS month's occurrence was never paid — a
-// separate unresolved bucket from needsReview, covering the "due late in
-// the month" reconciliation gap.
-// Exclude any bill already counted via needsReview — a bill unpaid for
-// two or more months can satisfy both conditions independently, which
-// would double-count the same real debt if not guarded against here.
-const previousMonthUnpaidBills = bills.filter(
-  (b) => b.previousMonthUnpaid && !needsReviewBillIds.has(b.id)
-);
-const previousMonthUnpaidAmount = previousMonthUnpaidBills.reduce(
-  (sum, b) => sum + Number(b.amount),
-  0
-);
-
-// Everything currently unresolved, combined — used both for "Due before
-// next payday" and to correctly reduce "Projected Remaining," since
-// periods never include orphaned/unresolved obligations by design.
-const totalUnresolvedAmount =
-  needsReview.reduce((sum, n) => sum + n.amount, 0) +
-  unresolvedSplitAmount +
-  previousMonthUnpaidAmount;
-  
-const dueBeforeNextPaydayCount =
-  (currentPeriod?.bills.length ?? 0) +
-  needsReview.length +
-  unresolvedSplitCount +
-  previousMonthUnpaidBills.length;
-const dueBeforeNextPaydayAmount =
-  (currentPeriod?.totalBillAmount ?? 0) + totalUnresolvedAmount;
-
+  const dueBeforeNextPaydayCount =
+    (currentPeriod?.bills.length ?? 0) +
+    needsReview.length +
+    unresolvedSplitCount +
+    previousMonthUnpaidBills.length;
+  const dueBeforeNextPaydayAmount =
+    (currentPeriod?.totalBillAmount ?? 0) + totalUnresolvedAmount;
   const projectedRemainingThruNextMonth =
-  periods
-    .filter((p) => new Date(p.start) <= endOfYearUTC)
-    .reduce((sum, p) => sum + (p.income - p.totalBillAmount), 0) - totalUnresolvedAmount;
-
+    periods
+      .filter((p) => new Date(p.start) <= endOfYearUTC)
+      .reduce((sum, p) => sum + (p.income - p.totalBillAmount), 0) - totalUnresolvedAmount;
   const actualSpentSoFar = currentPeriod
     ? bills.reduce((sum, b) => {
         if (b.hasActiveSplit) {
@@ -465,26 +412,26 @@ const dueBeforeNextPaydayAmount =
           );
           return sum + paidLegsInPeriod.reduce((s, p) => s + Number(p.paidAmount ?? p.amount), 0);
         }
-
         if (!b.paidThisMonth) return sum;
-
         const paidRow = b.payments.find((p) => p.status === "PAID" && !p.isSplitPayment);
         if (!paidRow || !paidRow.paidDate) return sum;
         const paidDate = new Date(paidRow.paidDate);
         if (paidDate < new Date(currentPeriod.start) || paidDate >= new Date(currentPeriod.end)) {
           return sum;
         }
-
         return sum + Number(b.paidAmount ?? b.amount);
       }, 0)
     : 0;
-
   const actualRemaining = currentPeriod ? currentPeriod.income - actualSpentSoFar : null;
-
   if (loading) {
-    return <main className="p-8">Loading...</main>;
-  }
-
+  return (
+    <main className="min-h-screen flex items-center justify-center">
+      <div className="animate-pulse">
+        <Logo />
+      </div>
+    </main>
+  );
+}
   return (
     <main className="mx-auto max-w-4xl p-4 sm:p-8 space-y-6 sm:space-y-8">
       <div className="flex items-center justify-between border-b pb-4">
@@ -525,7 +472,6 @@ const dueBeforeNextPaydayAmount =
           )}
         </div>
       </div>
-
       {legendOpen && (
         <Card className="shadow-sm border-border/50 py-6">
           <CardHeader>
@@ -558,9 +504,7 @@ const dueBeforeNextPaydayAmount =
           </CardContent>
         </Card>
       )}
-
       <InstallPrompt />
-
       <div className="rounded-2xl bg-zinc-900 p-6 sm:p-8 shadow-lg">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-4">
           <div>
@@ -605,13 +549,11 @@ const dueBeforeNextPaydayAmount =
               const usedRatio = periodTotal > 0 ? (periodTotal - periodRemaining) / periodTotal : 0;
               const isNegative = projectedRemainingThruNextMonth < 0;
               const isTight = !isNegative && usedRatio > 0.8;
-
               const colorClass = isNegative
                 ? "text-red-400"
                 : isTight
                 ? "text-yellow-400"
                 : "text-primary";
-
               return (
                 <>
                   <p className={`text-3xl font-bold mt-1 flex items-center gap-2 ${colorClass}`}>
@@ -633,7 +575,6 @@ const dueBeforeNextPaydayAmount =
             })()}
           </div>
         </div>
-
         {totalIncome > 0 && (
           <div className="mt-6 pt-6 border-t border-zinc-700">
             <div className="flex justify-between text-xs text-zinc-400 mb-2">
@@ -655,7 +596,6 @@ const dueBeforeNextPaydayAmount =
           </div>
         )}
       </div>
-
       <Card className="border-primary/30 bg-primary/5 shadow-sm py-6">
         <CardHeader>
           <CardTitle>Your AI Coach</CardTitle>
@@ -675,7 +615,6 @@ const dueBeforeNextPaydayAmount =
           )}
         </CardContent>
       </Card>
-
       {periods.length > 0 && (
   <Card className="shadow-sm border-border/50 py-6">
     <CardHeader>
@@ -736,7 +675,6 @@ style={{ scrollSnapAlign: "center", flex: "0 0 100%" }}
                   </span>
                 )}
               </button>
-
               {expandedPeriod === idx && p.bills.length > 0 && (
                 <div className="border-t px-3 py-2 space-y-1 max-h-64 overflow-y-auto">
                   {p.bills.map((item: any, i: number) => (
@@ -751,7 +689,6 @@ style={{ scrollSnapAlign: "center", flex: "0 0 100%" }}
           </div>
         ))}
       </div>
-
       <div className="flex justify-center gap-1.5 mt-3">
         {periods.map((_, idx) => (
           <span
@@ -765,7 +702,6 @@ style={{ scrollSnapAlign: "center", flex: "0 0 100%" }}
     </CardContent>
   </Card>
 )}
-
       {suggestions.length > 0 && (
         <Card className="border-primary/30 bg-primary/5 shadow-sm py-6">
           <CardHeader>
@@ -798,7 +734,6 @@ style={{ scrollSnapAlign: "center", flex: "0 0 100%" }}
           </CardContent>
         </Card>
       )}
-
       {billFundingRecommendations.length > 0 && (
   <Card className="border-yellow-500/30 bg-yellow-500/5 shadow-sm py-6">
     <CardHeader>
@@ -822,7 +757,6 @@ style={{ scrollSnapAlign: "center", flex: "0 0 100%" }}
     </CardContent>
   </Card>
 )}
-
       {opportunities.length > 0 && (
         <Card className="border-primary/30 bg-primary/5 shadow-sm py-6">
           <CardHeader>
@@ -845,7 +779,6 @@ style={{ scrollSnapAlign: "center", flex: "0 0 100%" }}
           </CardContent>
         </Card>
       )}
-
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         <Card className="shadow-sm border-border/50 py-6">
           <CardHeader>
@@ -897,7 +830,6 @@ style={{ scrollSnapAlign: "center", flex: "0 0 100%" }}
             </form>
           </CardContent>
         </Card>
-
         <Card className="shadow-sm border-border/50 py-6">
           <CardHeader>
             <CardTitle>Bills</CardTitle>
@@ -915,7 +847,6 @@ style={{ scrollSnapAlign: "center", flex: "0 0 100%" }}
                 Log Expense
               </Button>
             </form>
-
             {bills.map((b) => {
               const relevantGroupIds = [b.currentSplitGroupId, b.previousSplitGroupId].filter(Boolean);
               const splitLegs = b.payments.filter(
@@ -923,21 +854,24 @@ style={{ scrollSnapAlign: "center", flex: "0 0 100%" }}
               );
               const needsBillReview = needsReviewBillIds.has(b.id);
               const reviewItem = needsReview.find((n) => n.billId === b.id);
-
               return (
-                <div key={b.id} className="border-b pb-2">
+                <div key={b.id} className="border-b pb-3 pt-1">
                   <div className="flex items-start justify-between gap-2 text-sm">
                     <div className="flex items-center gap-2 min-w-0 flex-1">
                       {b.hasActiveSplit ? (
                         <SplitSquareHorizontal size={16} className="text-primary shrink-0" />
                       ) : (
-                        <button onClick={() => handleTogglePaid(b.id, b.paidThisMonth)}>
-                          {b.paidThisMonth ? (
-                            <CheckCircle2 size={16} className="text-primary" />
-                          ) : (
-                            <Circle size={16} className="text-muted-foreground/40" />
-                          )}
-                        </button>
+                        <button
+  onClick={() => handleTogglePaid(b.id, b.paidThisMonth)}
+  className="p-2.5 touch-manipulation"
+  aria-label={b.paidThisMonth ? "Mark unpaid" : "Mark paid"}
+>
+  {b.paidThisMonth ? (
+    <CheckCircle2 size={22} className="text-primary" />
+  ) : (
+    <Circle size={22} className="text-muted-foreground/40" />
+  )}
+</button>
                       )}
                       <div className="flex flex-col min-w-0">
                         <span
@@ -993,15 +927,14 @@ style={{ scrollSnapAlign: "center", flex: "0 0 100%" }}
                         </span>
                       )}
                       <button
-                        onClick={() => setMenuBillId(b.id)}
-                        className="text-muted-foreground/50 hover:text-primary transition-colors"
-                        aria-label="Bill options"
-                      >
-                        <MoreVertical size={16} />
-                      </button>
+  onClick={() => setMenuBillId(b.id)}
+  className="text-muted-foreground/50 hover:text-primary transition-colors p-2.5 touch-manipulation"
+  aria-label="Bill options"
+>
+  <MoreVertical size={20} />
+</button>
                     </div>
                   </div>
-
                   {reviewingBillId === b.id && reviewItem && (
                     <div className="ml-6 mt-1.5 rounded-md border border-blue-200 bg-blue-50 p-2 text-xs space-y-2">
                       <p>
@@ -1030,7 +963,6 @@ style={{ scrollSnapAlign: "center", flex: "0 0 100%" }}
                       </div>
                     </div>
                   )}
-
                   {b.hasActiveSplit && splitLegs.length > 0 && (
                     <div className="ml-6 mt-1.5 space-y-1">
                       {splitLegs.map((leg) => {
@@ -1039,17 +971,20 @@ style={{ scrollSnapAlign: "center", flex: "0 0 100%" }}
                           legPaid &&
                           leg.paidAmount != null &&
                           Number(leg.paidAmount) !== Number(leg.amount);
-
                         return (
                           <div key={leg.id} className="flex items-center justify-between gap-2 text-xs">
                             <div className="flex items-center gap-2">
-                              <button onClick={() => handleToggleSplitPaymentPaid(leg.id, legPaid)}>
-                                {legPaid ? (
-                                  <CheckCircle2 size={14} className="text-primary" />
-                                ) : (
-                                  <Circle size={14} className="text-muted-foreground/40" />
-                                )}
-                              </button>
+                              <button
+  onClick={() => handleToggleSplitPaymentPaid(leg.id, legPaid)}
+  className="p-2 touch-manipulation"
+  aria-label={legPaid ? "Mark leg unpaid" : "Mark leg paid"}
+>
+  {legPaid ? (
+    <CheckCircle2 size={18} className="text-primary" />
+  ) : (
+    <Circle size={18} className="text-muted-foreground/40" />
+  )}
+</button>
                               <span className={legPaid ? "text-muted-foreground line-through" : "text-muted-foreground"}>
                                 {leg.paidDate &&
                                   new Date(leg.paidDate).toLocaleDateString(undefined, { timeZone: "UTC" })}
@@ -1076,10 +1011,10 @@ style={{ scrollSnapAlign: "center", flex: "0 0 100%" }}
                               )}
                               <button
                                 onClick={() => setPayingLegId(leg.id)}
-                                className="text-muted-foreground/50 hover:text-primary transition-colors"
+                                className="text-muted-foreground/50 hover:text-primary transition-colors p-2"
                                 aria-label="Edit paid amount"
                               >
-                                <Pencil size={12} />
+                                <Pencil size={16} />
                               </button>
                             </div>
                           </div>
@@ -1139,7 +1074,6 @@ style={{ scrollSnapAlign: "center", flex: "0 0 100%" }}
           </CardContent>
         </Card>
       </div>
-
       {dueModalOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
@@ -1187,7 +1121,6 @@ style={{ scrollSnapAlign: "center", flex: "0 0 100%" }}
           </div>
         </div>
       )}
-
       {pastDueModalOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
@@ -1231,7 +1164,6 @@ style={{ scrollSnapAlign: "center", flex: "0 0 100%" }}
           </div>
         </div>
       )}
-
       {editingBill && (
         <EditBillModal
           bill={editingBill}
@@ -1239,7 +1171,6 @@ style={{ scrollSnapAlign: "center", flex: "0 0 100%" }}
           onSave={(updates) => handleUpdateBill(editingBill.id, updates)}
         />
       )}
-
       {editingIncome && (
         <EditIncomeModal
           income={editingIncome}
@@ -1247,7 +1178,6 @@ style={{ scrollSnapAlign: "center", flex: "0 0 100%" }}
           onSave={(updates) => handleUpdateIncome(editingIncome.id, updates)}
         />
       )}
-
       {menuBill && (
         <PayBillMenu
           bill={menuBill}
@@ -1264,7 +1194,6 @@ style={{ scrollSnapAlign: "center", flex: "0 0 100%" }}
           onDelete={() => handleDeleteBill(menuBill.id)}
         />
       )}
-
       {payingLeg && (
         <SplitLegPayModal
           leg={payingLeg}
@@ -1274,7 +1203,6 @@ style={{ scrollSnapAlign: "center", flex: "0 0 100%" }}
           }}
         />
       )}
-
       {monthlyReviewOpen && (
         <MonthlyReviewModal
           bills={monthlyReviewBills}
@@ -1285,7 +1213,6 @@ style={{ scrollSnapAlign: "center", flex: "0 0 100%" }}
     </main>
   );
 }
-
 function EditAmountForm({
   initialValue,
   onSave,
@@ -1296,7 +1223,6 @@ function EditAmountForm({
   onCancel: () => void;
 }) {
   const [value, setValue] = useState(initialValue);
-
   return (
     <div className="flex items-center gap-1">
       <Input
@@ -1316,7 +1242,6 @@ function EditAmountForm({
     </div>
   );
 }
-
 function getCategoryIcon(category: string | null) {
   const map: Record<string, typeof Tag> = {
     housing: Home,
