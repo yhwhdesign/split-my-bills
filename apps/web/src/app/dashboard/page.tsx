@@ -1037,7 +1037,7 @@ export default function DashboardPage() {
       )}
 
       {activeTab === "periods" && periods.length > 0 && (
-        <div className="flex-1 flex items-start justify-center pt-4">
+        <div className="flex-1 flex flex-col items-stretch justify-center">
         <Card className="shadow-sm border-border/50 py-6 w-full">
           <CardHeader>
             <CardTitle>Upcoming Pay Periods</CardTitle>
